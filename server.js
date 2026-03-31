@@ -1,0 +1,57 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const connectDB = require('./config/db');
+const errorHandler = require('./middleware/errorHandler');
+
+// Route imports
+const authRoutes = require('./routes/auth');
+const itemRoutes = require('./routes/items');
+const inventoryRoutes = require('./routes/inventory');
+const vendorRoutes = require('./routes/vendors');
+const customerRoutes = require('./routes/customers');
+const purchaseOrderRoutes = require('./routes/purchaseOrders');
+const grnRoutes = require('./routes/grn');
+const salesRoutes = require('./routes/sales');
+const reportRoutes = require('./routes/reports');
+const organizationRoutes = require('./routes/organizations');
+
+// Connect to DB
+connectDB();
+
+const app = express();
+
+// Middleware
+app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+if (process.env.NODE_ENV === 'development') app.use(morgan('dev'));
+
+// Health check
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/items', itemRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/grn', grnRoutes);
+app.use('/api/sales', salesRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/organization', organizationRoutes);
+
+// 404
+app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+
+// Global error handler
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 StockFlow API running on http://localhost:${PORT}`);
+});
+
+module.exports = app;
