@@ -1,11 +1,12 @@
 const PurchaseOrder = require('../models/PurchaseOrder');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getPOs = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.status) filter.status = req.query.status;
     if (req.query.vendor) filter.vendor = req.query.vendor;
     if (req.query.search) filter.poNumber = { $regex: req.query.search, $options: 'i' };

@@ -2,11 +2,12 @@ const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getInventory = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
 
     const [records, total] = await Promise.all([
       Inventory.find(filter).populate('item', 'name sku category unit reorderLevel').sort({ updatedAt: -1 }).skip(skip).limit(limit),
@@ -57,7 +58,7 @@ exports.getTransactions = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
     const sort = getSort(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.item) filter.item = req.query.item;
     if (req.query.type) filter.type = req.query.type;
 

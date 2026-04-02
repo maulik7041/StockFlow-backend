@@ -56,7 +56,30 @@ const seed = async () => {
       await Inventory.create({ item: item._id, organization: org._id, currentStock: Math.floor(Math.random() * 50) + 10 })
     }
   }
-  console.log('✅ Sample items + inventory created')
+
+  const currentCount = await Item.countDocuments({ organization: org._id })
+  if (currentCount < 100) {
+    const cats = ['Electronics', 'Furniture', 'Stationery', 'Chemicals', 'Safety', 'Hardware', 'Auto', 'Plumbing']
+    const units = ['pcs', 'nos', 'box', 'litre', 'set', 'kg', 'mtr']
+    let added = 0;
+    while (added + currentCount < 100) {
+        const cat = cats[Math.floor(Math.random() * cats.length)];
+        const unit = units[Math.floor(Math.random() * units.length)];
+        const item = await Item.create({
+            name: `Generated Product ${cat} ${added}`,
+            sku: `GEN-${cat.substring(0,3).toUpperCase()}-${String(Date.now() + added).slice(-5)}`,
+            category: cat,
+            unit: unit,
+            purchasePrice: Math.floor(Math.random() * 800) + 50,
+            sellingPrice: Math.floor(Math.random() * 1500) + 900,
+            reorderLevel: Math.floor(Math.random() * 20) + 2,
+            organization: org._id
+        });
+        await Inventory.create({ item: item._id, organization: org._id, currentStock: Math.floor(Math.random() * 150) });
+        added++;
+    }
+  }
+  console.log('✅ Sample items + inventory created (~100 items minimum)')
 
   // Vendors
   const vendorsData = [

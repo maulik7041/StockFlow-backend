@@ -1,11 +1,12 @@
 const Customer = require('../models/Customer');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getCustomers = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.search) filter.$or = [{ name: { $regex: req.query.search, $options: 'i' } }, { email: { $regex: req.query.search, $options: 'i' } }];
     if (req.query.isActive !== undefined) filter.isActive = req.query.isActive === 'true';
     const [customers, total] = await Promise.all([Customer.find(filter).sort(getSort(req.query, 'name', 1)).skip(skip).limit(limit), Customer.countDocuments(filter)]);

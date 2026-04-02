@@ -5,11 +5,12 @@ const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getGRNs = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.po) filter.purchaseOrder = req.query.po;
     const [grns, total] = await Promise.all([
       GRN.find(filter).populate('purchaseOrder', 'poNumber').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),

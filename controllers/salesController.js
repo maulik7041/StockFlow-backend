@@ -4,11 +4,12 @@ const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getSales = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.status) filter.status = req.query.status;
     if (req.query.customer) filter.customer = req.query.customer;
     if (req.query.search) filter.invoiceNumber = { $regex: req.query.search, $options: 'i' };

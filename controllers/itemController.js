@@ -2,12 +2,13 @@ const Item = require('../models/Item');
 const Inventory = require('../models/Inventory');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
 
 exports.getItems = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
     const sort = getSort(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.search) {
       filter.$or = [
         { name: { $regex: req.query.search, $options: 'i' } },
