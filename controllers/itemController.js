@@ -17,6 +17,7 @@ exports.getItems = async (req, res, next) => {
       ];
     }
     if (req.query.category) filter.category = req.query.category;
+    if (req.query.itemType) filter.itemType = { $in: req.query.itemType.split(',') };
     if (req.query.isActive !== undefined) filter.isActive = req.query.isActive === 'true';
 
     const [items, total] = await Promise.all([

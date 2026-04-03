@@ -7,7 +7,7 @@ const stockTransactionSchema = new mongoose.Schema(
     type: { type: String, enum: ['IN', 'OUT', 'ADJUST'], required: true },
     quantity: { type: Number, required: true },
     balanceAfter: { type: Number, required: true },
-    refModel: { type: String, enum: ['GRN', 'SalesInvoice', 'Adjustment'], default: 'Adjustment' },
+    refModel: { type: String, enum: ['GRN', 'SalesInvoice', 'Adjustment', 'StockIssue'], default: 'Adjustment' },
     refId: { type: mongoose.Schema.Types.ObjectId },
     note: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

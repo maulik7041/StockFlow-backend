@@ -8,6 +8,8 @@ const Item = require('./models/Item')
 const Inventory = require('./models/Inventory')
 const Vendor = require('./models/Vendor')
 const Customer = require('./models/Customer')
+const StockIssue = require('./models/StockIssue')
+const StockTransaction = require('./models/StockTransaction')
 
 const seed = async () => {
   await connectDB()
@@ -39,14 +41,14 @@ const seed = async () => {
 
   // Items
   const itemsData = [
-    { name: 'Laptop Stand', sku: 'ELEC-001', category: 'Electronics', unit: 'pcs', purchasePrice: 1200, sellingPrice: 1800, reorderLevel: 5 },
-    { name: 'USB-C Cable', sku: 'ELEC-002', category: 'Electronics', unit: 'pcs', purchasePrice: 150, sellingPrice: 299, reorderLevel: 20 },
-    { name: 'Wireless Mouse', sku: 'ELEC-003', category: 'Electronics', unit: 'pcs', purchasePrice: 500, sellingPrice: 899, reorderLevel: 10 },
-    { name: 'Office Chair', sku: 'FURN-001', category: 'Furniture', unit: 'nos', purchasePrice: 4500, sellingPrice: 7500, reorderLevel: 2 },
-    { name: 'A4 Paper Ream', sku: 'STAT-001', category: 'Stationery', unit: 'box', purchasePrice: 280, sellingPrice: 350, reorderLevel: 15 },
-    { name: 'Printer Ink (Black)', sku: 'STAT-002', category: 'Stationery', unit: 'pcs', purchasePrice: 400, sellingPrice: 650, reorderLevel: 8 },
-    { name: 'Industrial Cleaner', sku: 'CHEM-001', category: 'Chemicals', unit: 'litre', purchasePrice: 120, sellingPrice: 220, reorderLevel: 25 },
-    { name: 'Safety Gloves', sku: 'SAFE-001', category: 'Safety', unit: 'set', purchasePrice: 80, sellingPrice: 150, reorderLevel: 30 },
+    { name: 'Laptop Stand', sku: 'ELEC-001', category: 'Electronics', unit: 'pcs', purchasePrice: 1200, sellingPrice: 1800, reorderLevel: 5, itemType: 'trading_item' },
+    { name: 'USB-C Cable', sku: 'ELEC-002', category: 'Electronics', unit: 'pcs', purchasePrice: 150, sellingPrice: 299, reorderLevel: 20, itemType: 'trading_item' },
+    { name: 'Wireless Mouse', sku: 'ELEC-003', category: 'Electronics', unit: 'pcs', purchasePrice: 500, sellingPrice: 899, reorderLevel: 10, itemType: 'finished_good' },
+    { name: 'Metal Base Frame', sku: 'RAW-001', category: 'Hardware', unit: 'pcs', purchasePrice: 450, sellingPrice: 0, reorderLevel: 2, itemType: 'raw_material' },
+    { name: 'A4 Paper Ream', sku: 'STAT-001', category: 'Stationery', unit: 'box', purchasePrice: 280, sellingPrice: 350, reorderLevel: 15, itemType: 'trading_item' },
+    { name: 'Printer Ink (Black)', sku: 'STAT-002', category: 'Stationery', unit: 'pcs', purchasePrice: 400, sellingPrice: 650, reorderLevel: 8, itemType: 'finished_good' },
+    { name: 'Industrial Solvent', sku: 'RAW-CHEM-01', category: 'Chemicals', unit: 'litre', purchasePrice: 120, sellingPrice: 0, reorderLevel: 25, itemType: 'raw_material' },
+    { name: 'Safety Gloves', sku: 'SAFE-001', category: 'Safety', unit: 'set', purchasePrice: 80, sellingPrice: 150, reorderLevel: 30, itemType: 'trading_item' },
   ]
 
   for (const itemData of itemsData) {
@@ -61,17 +63,20 @@ const seed = async () => {
   if (currentCount < 100) {
     const cats = ['Electronics', 'Furniture', 'Stationery', 'Chemicals', 'Safety', 'Hardware', 'Auto', 'Plumbing']
     const units = ['pcs', 'nos', 'box', 'litre', 'set', 'kg', 'mtr']
+    const types = ['raw_material', 'finished_good', 'trading_item', 'trading_item'] // High bias for trading
     let added = 0;
     while (added + currentCount < 100) {
         const cat = cats[Math.floor(Math.random() * cats.length)];
         const unit = units[Math.floor(Math.random() * units.length)];
+        const type = types[Math.floor(Math.random() * types.length)];
         const item = await Item.create({
             name: `Generated Product ${cat} ${added}`,
             sku: `GEN-${cat.substring(0,3).toUpperCase()}-${String(Date.now() + added).slice(-5)}`,
             category: cat,
+            itemType: type,
             unit: unit,
-            purchasePrice: Math.floor(Math.random() * 800) + 50,
-            sellingPrice: Math.floor(Math.random() * 1500) + 900,
+            purchasePrice: type === 'finished_good' ? 0 : Math.floor(Math.random() * 800) + 50,
+            sellingPrice: type === 'raw_material' ? 0 : Math.floor(Math.random() * 1500) + 900,
             reorderLevel: Math.floor(Math.random() * 20) + 2,
             organization: org._id
         });
@@ -106,6 +111,42 @@ const seed = async () => {
     }
   }
   console.log('✅ Sample customers created')
+
+  // Generate Sample Stock Issues
+  if (!(await StockIssue.findOne({ organization: org._id }))) {
+    const rawMaterials = await Item.find({ organization: org._id, itemType: 'raw_material' }).limit(3);
+    if (rawMaterials.length > 0) {
+      const issue = await StockIssue.create({
+        organization: org._id,
+        issueNumber: 'SI-00001',
+        department: 'Assembly Line Floor B',
+        notes: 'Initial production batch allocation for weekly assembly.',
+        issuedBy: admin._id,
+        status: 'Issued',
+        items: rawMaterials.map(rm => ({ item: rm._id, quantity: Math.floor(Math.random() * 10) + 5 }))
+      });
+      // Deduct mock stock
+      for (const req of issue.items) {
+        const inv = await Inventory.findOne({ item: req.item, organization: org._id });
+        if(inv) {
+          inv.currentStock -= req.quantity;
+          await inv.save();
+          await StockTransaction.create({
+            organization: org._id,
+            item: req.item,
+            type: 'OUT',
+            quantity: req.quantity,
+            balanceAfter: inv.currentStock,
+            refModel: 'StockIssue',
+            refId: issue._id,
+            note: 'Seed generation issuance',
+            createdBy: admin._id
+          });
+        }
+      }
+      console.log('✅ Sample stock issues simulated');
+    }
+  }
 
   console.log('\n🎉 Seed complete!')
   console.log('   📧 admin@stockflow.com  🔑 admin123')

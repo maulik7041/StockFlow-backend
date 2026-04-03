@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const itemSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
+    itemType: { type: String, enum: ['raw_material', 'finished_good', 'trading_item'], required: true, default: 'trading_item' },
     name: { type: String, required: [true, 'Item name is required'], trim: true },
     sku: { type: String, sparse: true, trim: true, uppercase: true },
     category: { type: String, required: [true, 'Category is required'], trim: true },
