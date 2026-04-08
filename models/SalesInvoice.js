@@ -20,7 +20,7 @@ const salesInvoiceSchema = new mongoose.Schema(
     invoiceNumber: { type: String },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     items: [saleItemSchema],
-    status: { type: String, enum: ['Draft', 'Issued', 'Paid', 'Cancelled'], default: 'Draft' },
+    status: { type: String, enum: ['Issued', 'Paid', 'Cancelled'], default: 'Issued' },
     invoiceDate: { type: Date, default: Date.now },
     dueDate: { type: Date },
     totalAmount: { type: Number, default: 0 },

@@ -9,6 +9,25 @@ exports.getInventory = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
 
+    if (filter['item.name'] || filter['item.category']) {
+      const Item = require('../models/Item');
+      const itemFilter = { organization: req.organizationId };
+      if (filter['item.name']) itemFilter.name = filter['item.name'];
+      if (filter['item.category']) itemFilter.category = filter['item.category'];
+
+      const items = await Item.find(itemFilter).select('_id');
+      filter.item = { $in: items.map(i => i._id) };
+      delete filter['item.name'];
+      delete filter['item.category'];
+    }
+
+    if (filter.status) {
+      if (filter.status.$regex && filter.status.$regex.toLowerCase() === 'out') {
+        filter.currentStock = 0;
+      }
+      delete filter.status;
+    }
+
     const [records, total] = await Promise.all([
       Inventory.find(filter).populate('item', 'name sku category unit reorderLevel').sort({ updatedAt: -1 }).skip(skip).limit(limit),
       Inventory.countDocuments(filter),
@@ -61,6 +80,13 @@ exports.getTransactions = async (req, res, next) => {
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.item) filter.item = req.query.item;
     if (req.query.type) filter.type = req.query.type;
+
+    if (filter['item.name']) {
+      const Item = require('../models/Item');
+      const items = await Item.find({ name: filter['item.name'], organization: req.organizationId }).select('_id');
+      filter.item = { $in: items.map(i => i._id) };
+      delete filter['item.name'];
+    }
 
     const [transactions, total] = await Promise.all([
       StockTransaction.find(filter)

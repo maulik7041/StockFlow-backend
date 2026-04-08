@@ -24,7 +24,7 @@ const poSchema = new mongoose.Schema(
     items: [poItemSchema],
     status: {
       type: String,
-      enum: ['Draft', 'Sent', 'Partial', 'Complete', 'Cancelled'],
+      enum: ['Draft', 'Sent', 'Complete', 'Cancelled'],
       default: 'Draft',
     },
     expectedDate: { type: Date },

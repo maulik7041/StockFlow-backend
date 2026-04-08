@@ -19,6 +19,9 @@ const getAdvancedFilter = (query) => {
       if (config.type === 'text' && config.val) {
         filter[key] = { $regex: config.val, $options: 'i' };
       } 
+      else if (config.type === 'options' && config.val && config.val.length > 0) {
+        filter[key] = { $in: config.val };
+      }
       else if (config.type === 'number') {
         filter[key] = {};
         if (config.min !== undefined && config.min !== '') filter[key].$gte = Number(config.min);

@@ -3,15 +3,24 @@ const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
+const { getAdvancedFilter } = require('../utils/filter');
+const Item = require('../models/Item');
 
 exports.getIssues = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query);
     const sort = getSort(req.query);
-    const filter = { organization: req.organizationId };
+    const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
+
+    if (filter['item.name']) {
+      const items = await Item.find({ name: filter['item.name'], organization: req.organizationId }).select('_id');
+      filter['items.item'] = { $in: items.map(i => i._id) };
+      delete filter['item.name'];
+    }
 
     const [issues, total] = await Promise.all([
       StockIssue.find(filter)
+        .populate('items.item', 'name')
         .populate('issuedBy', 'name email')
         .sort(sort).skip(skip).limit(limit),
       StockIssue.countDocuments(filter),

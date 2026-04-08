@@ -74,8 +74,9 @@ exports.createGRN = async (req, res, next) => {
     }
 
     const allComplete = po.items.every((i) => i.receivedQty >= i.quantity);
-    const anyReceived = po.items.some((i) => (i.receivedQty || 0) > 0);
-    po.status = allComplete ? 'Complete' : anyReceived ? 'Partial' : po.status;
+    if (allComplete) {
+      po.status = 'Complete';
+    }
     await po.save();
 
     return sendSuccess(res, grn, 'GRN created and stock updated', 201);
