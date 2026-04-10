@@ -21,23 +21,32 @@ exports.getInventory = async (req, res, next) => {
       delete filter['item.category'];
     }
 
+    let statusArr = [];
     if (filter.status) {
-      if (filter.status.$regex && filter.status.$regex.toLowerCase() === 'out') {
-        filter.currentStock = 0;
-      }
+      if (filter.status.$in) statusArr = filter.status.$in;
+      if (filter.status.$regex && filter.status.$regex.toLowerCase() === 'out') statusArr.push('out_of_stock');
       delete filter.status;
     }
 
-    const [records, total] = await Promise.all([
-      Inventory.find(filter).populate('item', 'name sku category unit reorderLevel').sort({ updatedAt: -1 }).skip(skip).limit(limit),
-      Inventory.countDocuments(filter),
-    ]);
+    // Fetch all to support computed status filtering
+    const allRecords = await Inventory.find(filter)
+      .populate('item', 'name category unit reorderLevel')
+      .sort({ updatedAt: -1 });
 
-    const data = records.map((r) => {
+    const filteredRecords = allRecords.map((r) => {
       const obj = r.toJSON();
-      obj.isLowStock = r.item && r.currentStock <= r.item.reorderLevel;
+      obj.isLowStock = !!(r.item && r.currentStock <= r.item.reorderLevel);
       return obj;
+    }).filter(r => {
+      if (statusArr.length === 0) return true;
+      if (statusArr.includes('out_of_stock') && r.currentStock === 0) return true;
+      if (statusArr.includes('low_stock') && r.isLowStock && r.currentStock > 0) return true;
+      if (statusArr.includes('in_stock') && !r.isLowStock && r.currentStock > 0) return true;
+      return false;
     });
+
+    const total = filteredRecords.length;
+    const data = filteredRecords.slice(skip, skip + limit);
 
     return sendPaginated(res, data, total, page, limit, 'Inventory fetched');
   } catch (err) { next(err); }
@@ -78,6 +87,7 @@ exports.getTransactions = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const sort = getSort(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
+    filter.refModel = { $in: ['StockIssue', 'GRN', 'Adjustment'] };
     if (req.query.item) filter.item = req.query.item;
     if (req.query.type) filter.type = req.query.type;
 
@@ -90,7 +100,7 @@ exports.getTransactions = async (req, res, next) => {
 
     const [transactions, total] = await Promise.all([
       StockTransaction.find(filter)
-        .populate('item', 'name sku unit')
+        .populate('item', 'name unit')
         .populate('createdBy', 'name')
         .sort(sort).skip(skip).limit(limit),
       StockTransaction.countDocuments(filter),

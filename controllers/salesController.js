@@ -25,7 +25,7 @@ exports.getSales = async (req, res, next) => {
 exports.getSale = async (req, res, next) => {
   try {
     const sale = await SalesInvoice.findOne({ _id: req.params.id, organization: req.organizationId })
-      .populate('customer').populate('items.item', 'name sku unit').populate('createdBy', 'name');
+      .populate('customer').populate('items.item', 'name unit').populate('createdBy', 'name');
     if (!sale) return sendError(res, 'Invoice not found', 404);
     return sendSuccess(res, sale);
   } catch (err) { next(err); }
@@ -33,7 +33,7 @@ exports.getSale = async (req, res, next) => {
 
 exports.createSale = async (req, res, next) => {
   try {
-    const { customer, items, status, dueDate, notes } = req.body;
+    const { customer, items, status, dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType } = req.body;
     const orgId = req.organizationId;
 
     for (const saleItem of items) {
@@ -43,7 +43,7 @@ exports.createSale = async (req, res, next) => {
       }
     }
 
-    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', dueDate, notes, organization: orgId, createdBy: req.user._id });
+    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, organization: orgId, createdBy: req.user._id });
 
     // Deduct stock
     for (const saleItem of items) {

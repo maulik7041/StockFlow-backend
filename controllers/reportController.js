@@ -9,9 +9,9 @@ const { sendSuccess } = require('../utils/response');
 exports.stockReport = async (req, res, next) => {
   try {
     const orgId = req.organizationId;
-    const inventory = await Inventory.find({ organization: orgId }).populate('item', 'name sku category unit reorderLevel sellingPrice purchasePrice');
+    const inventory = await Inventory.find({ organization: orgId }).populate('item', 'name category unit reorderLevel sellingPrice purchasePrice');
     const report = inventory.filter((r) => r.item).map((r) => ({
-      item: r.item.name, sku: r.item.sku, category: r.item.category, unit: r.item.unit,
+      item: r.item.name, category: r.item.category, unit: r.item.unit,
       currentStock: r.currentStock, reorderLevel: r.item.reorderLevel,
       isLowStock: r.currentStock <= r.item.reorderLevel,
       stockValue: r.currentStock * r.item.purchasePrice,
@@ -99,27 +99,50 @@ exports.profitReport = async (req, res, next) => {
 
 exports.dashboardStats = async (req, res, next) => {
   try {
-    const orgId = req.organizationId;
-    const [totalItems, totalVendors, totalCustomers, allInv, pendingPOs, recentSales, recentTransactions] = await Promise.all([
-      Item.countDocuments({ organization: orgId, isActive: true }),
-      mongoose.model('Vendor').countDocuments({ organization: orgId, isActive: true }),
-      mongoose.model('Customer').countDocuments({ organization: orgId, isActive: true }),
-      Inventory.find({ organization: orgId }).populate('item', 'reorderLevel'),
-      PurchaseOrder.countDocuments({ organization: orgId, status: { $in: ['Draft', 'Sent', 'Partial'] } }),
-      SalesInvoice.find({ organization: orgId, status: { $ne: 'Cancelled' } }).sort({ createdAt: -1 }).limit(5).populate('customer', 'name').select('invoiceNumber customer totalAmount status invoiceDate'),
-      StockTransaction.find({ organization: orgId }).sort({ createdAt: -1 }).limit(10).populate('item', 'name sku').select('item type quantity balanceAfter createdAt'),
+    const orgId = new mongoose.Types.ObjectId(req.organizationId);
+
+    const [allInv, pendingPOs, unpaidSales] = await Promise.all([
+      Inventory.find({ organization: orgId }).populate('item', 'reorderLevel purchasePrice'),
+      PurchaseOrder.countDocuments({ organization: orgId, status: 'Draft' }),
+      SalesInvoice.find({ organization: orgId, status: { $in: ['Issued', 'Partial'] } }),
     ]);
 
-    const lowStockCount = allInv.filter((r) => r.item && r.currentStock <= r.item.reorderLevel).length;
+    let totalStockValue = 0;
+    let lowStockCount = 0;
+    for (const inv of allInv) {
+      if (!inv.item) continue;
+      if (inv.currentStock <= inv.item.reorderLevel) lowStockCount++;
+      totalStockValue += inv.currentStock * (inv.item.purchasePrice || 0);
+    }
+
+    let outstandingPayments = 0;
+    for (const sale of unpaidSales) {
+      outstandingPayments += (sale.totalAmount - (sale.paidAmount || 0));
+    }
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const monthlyRevenue = await SalesInvoice.aggregate([
-      { $match: { organization: new mongoose.Types.ObjectId(orgId), status: { $in: ['Issued', 'Paid'] }, invoiceDate: { $gte: sixMonthsAgo } } },
-      { $group: { _id: { year: { $year: '$invoiceDate' }, month: { $month: '$invoiceDate' } }, revenue: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
-      { $sort: { '_id.year': 1, '_id.month': 1 } },
+    
+    const [monthlyRevenue, monthlyPurchases] = await Promise.all([
+      SalesInvoice.aggregate([
+        { $match: { organization: orgId, status: { $in: ['Issued', 'Paid', 'Partial'] }, invoiceDate: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { year: { $year: '$invoiceDate' }, month: { $month: '$invoiceDate' } }, revenue: { $sum: '$totalAmount' } } },
+        { $sort: { '_id.year': 1, '_id.month': 1 } },
+      ]),
+      PurchaseOrder.aggregate([
+        { $match: { organization: orgId, status: { $in: ['Complete', 'Sent', 'Partial'] }, createdAt: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } }, purchases: { $sum: '$totalAmount' } } },
+        { $sort: { '_id.year': 1, '_id.month': 1 } },
+      ])
     ]);
 
-    return sendSuccess(res, { totalItems, totalVendors, totalCustomers, lowStockCount, pendingPOs, recentSales, recentTransactions, monthlyRevenue });
+    return sendSuccess(res, { 
+      totalStockValue, 
+      lowStockCount, 
+      outstandingPayments, 
+      pendingPOs, 
+      monthlyRevenue, 
+      monthlyPurchases 
+    });
   } catch (err) { next(err); }
 };

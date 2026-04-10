@@ -23,7 +23,7 @@ exports.getGRNs = async (req, res, next) => {
 exports.getGRN = async (req, res, next) => {
   try {
     const grn = await GRN.findOne({ _id: req.params.id, organization: req.organizationId })
-      .populate('purchaseOrder', 'poNumber vendor').populate('items.item', 'name sku unit');
+      .populate('purchaseOrder', 'poNumber vendor').populate('items.item', 'name unit');
     if (!grn) return sendError(res, 'GRN not found', 404);
     return sendSuccess(res, grn);
   } catch (err) { next(err); }

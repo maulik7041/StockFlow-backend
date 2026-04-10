@@ -5,6 +5,7 @@ const saleItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true, min: 0 },
   discount: { type: Number, default: 0 },
+  gstRate: { type: Number, default: 0 },
 });
 
 saleItemSchema.virtual('total').get(function () {
@@ -20,6 +21,14 @@ const salesInvoiceSchema = new mongoose.Schema(
     invoiceNumber: { type: String },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     items: [saleItemSchema],
+    sameAsBilling: { type: Boolean, default: true },
+    billingAddress: { type: String, trim: true },
+    shippingAddress: { type: String, trim: true },
+    freightCharges: { type: Number, default: 0 },
+    taxType: { type: String, enum: ['Intra-state (CGST+SGST)', 'Inter-state (IGST)'], default: 'Intra-state (CGST+SGST)' },
+    cgstAmount: { type: Number, default: 0 },
+    sgstAmount: { type: Number, default: 0 },
+    igstAmount: { type: Number, default: 0 },
     status: { type: String, enum: ['Issued', 'Paid', 'Cancelled'], default: 'Issued' },
     invoiceDate: { type: Date, default: Date.now },
     dueDate: { type: Date },
@@ -44,10 +53,25 @@ salesInvoiceSchema.pre('save', async function (next) {
     const count = await mongoose.model('SalesInvoice').countDocuments({ organization: this.organization });
     this.invoiceNumber = `INV-${String(count + 1).padStart(5, '0')}`;
   }
-  this.totalAmount = this.items.reduce((sum, i) => {
-    const subtotal = i.quantity * i.unitPrice;
-    return sum + subtotal - (subtotal * i.discount) / 100;
-  }, 0);
+  let subtotal = 0;
+  let totalTax = 0;
+  this.items.forEach(i => {
+    const lineSub = (i.quantity * i.unitPrice) - ((i.quantity * i.unitPrice * i.discount) / 100);
+    subtotal += lineSub;
+    totalTax += lineSub * (i.gstRate || 0) / 100;
+  });
+
+  if (this.taxType === 'Inter-state (IGST)') {
+    this.igstAmount = totalTax;
+    this.cgstAmount = 0;
+    this.sgstAmount = 0;
+  } else {
+    this.igstAmount = 0;
+    this.cgstAmount = totalTax / 2;
+    this.sgstAmount = totalTax / 2;
+  }
+
+  this.totalAmount = subtotal + (this.freightCharges || 0) + totalTax;
   next();
 });
 

@@ -32,7 +32,7 @@ exports.getIssues = async (req, res, next) => {
 exports.getIssue = async (req, res, next) => {
   try {
     const issue = await StockIssue.findOne({ _id: req.params.id, organization: req.organizationId })
-      .populate('items.item', 'name sku unit category')
+      .populate('items.item', 'name unit category')
       .populate('issuedBy', 'name');
     if (!issue) return sendError(res, 'Stock issue not found', 404);
     return sendSuccess(res, issue);

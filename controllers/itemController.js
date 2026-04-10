@@ -12,7 +12,6 @@ exports.getItems = async (req, res, next) => {
     if (req.query.search) {
       filter.$or = [
         { name: { $regex: req.query.search, $options: 'i' } },
-        { sku: { $regex: req.query.search, $options: 'i' } },
         { category: { $regex: req.query.search, $options: 'i' } },
       ];
     }

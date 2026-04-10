@@ -22,7 +22,7 @@ exports.getPOs = async (req, res, next) => {
 exports.getPO = async (req, res, next) => {
   try {
     const po = await PurchaseOrder.findOne({ _id: req.params.id, organization: req.organizationId })
-      .populate('vendor').populate('items.item', 'name sku unit').populate('createdBy', 'name');
+      .populate('vendor').populate('items.item', 'name unit').populate('createdBy', 'name');
     if (!po) return sendError(res, 'Purchase Order not found', 404);
     return sendSuccess(res, po);
   } catch (err) { next(err); }
