@@ -1,7 +1,7 @@
 {
-  "name": "stockflow-backend",
+  "name": "bizzops-backend",
   "version": "1.0.0",
-  "description": "StockFlow Inventory, Purchase & Sales Management API",
+  "description": "BizzOps Inventory, Purchase & Sales Management API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

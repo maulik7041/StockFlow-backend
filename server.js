@@ -53,7 +53,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 StockFlow API running on http://localhost:${PORT}`);
+  console.log(`🚀 BizzOps API running on http://localhost:${PORT}`);
 });
 
 module.exports = app;

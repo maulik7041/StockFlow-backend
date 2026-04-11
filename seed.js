@@ -25,18 +25,18 @@ const seed = async () => {
   }
 
   // Admin user
-  let admin = await User.findOne({ email: 'admin@stockflow.com' })
+  let admin = await User.findOne({ email: 'admin@bizzops.com' })
   if (!admin) {
-    admin = await User.create({ name: 'Admin User', email: 'admin@stockflow.com', password: 'admin123', role: 'admin', organization: org._id })
+    admin = await User.create({ name: 'Admin User', email: 'admin@bizzops.com', password: 'admin123', role: 'admin', organization: org._id })
     org.owner = admin._id
     await org.save()
-    console.log('✅ Admin: admin@stockflow.com / admin123')
+    console.log('✅ Admin: admin@bizzops.com / admin123')
   }
 
   // Manager user
-  if (!(await User.findOne({ email: 'manager@stockflow.com' }))) {
-    await User.create({ name: 'Store Manager', email: 'manager@stockflow.com', password: 'manager123', role: 'manager', organization: org._id })
-    console.log('✅ Manager: manager@stockflow.com / manager123')
+  if (!(await User.findOne({ email: 'manager@bizzops.com' }))) {
+    await User.create({ name: 'Store Manager', email: 'manager@bizzops.com', password: 'manager123', role: 'manager', organization: org._id })
+    console.log('✅ Manager: manager@bizzops.com / manager123')
   }
 
   // Items
@@ -149,8 +149,8 @@ const seed = async () => {
   }
 
   console.log('\n🎉 Seed complete!')
-  console.log('   📧 admin@stockflow.com  🔑 admin123')
-  console.log('   📧 manager@stockflow.com  🔑 manager123\n')
+  console.log('   📧 admin@bizzops.com  🔑 admin123')
+  console.log('   📧 manager@bizzops.com  🔑 manager123\n')
 
   await mongoose.connection.close()
   process.exit(0)
