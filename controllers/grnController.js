@@ -47,14 +47,15 @@ exports.createGRN = async (req, res, next) => {
       }
     }
 
-    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, createdBy: req.user._id });
+    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     for (const grnItem of items) {
       let inv = await Inventory.findOne({ item: grnItem.item, organization: orgId });
       if (!inv) {
-        inv = await Inventory.create({ item: grnItem.item, organization: orgId, currentStock: 0 });
+        inv = await Inventory.create({ item: grnItem.item, organization: orgId, currentStock: 0, createdAt: Date.now(), updatedAt: Date.now() });
       }
       inv.currentStock += grnItem.receivedQty;
+      inv.updatedAt = Date.now();
       await inv.save();
 
       await StockTransaction.create({
@@ -67,6 +68,8 @@ exports.createGRN = async (req, res, next) => {
         refId: grn._id,
         note: `GRN ${grn.grnNumber}`,
         createdBy: req.user._id,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
 
       const poItem = po.items.find((i) => i.item.toString() === grnItem.item);
@@ -77,6 +80,7 @@ exports.createGRN = async (req, res, next) => {
     if (allComplete) {
       po.status = 'Complete';
     }
+    po.updatedAt = Date.now();
     await po.save();
 
     return sendSuccess(res, grn, 'GRN created and stock updated', 201);

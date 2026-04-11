@@ -30,7 +30,7 @@ exports.getPO = async (req, res, next) => {
 
 exports.createPO = async (req, res, next) => {
   try {
-    const po = await PurchaseOrder.create({ ...req.body, organization: req.organizationId, createdBy: req.user._id });
+    const po = await PurchaseOrder.create({ ...req.body, organization: req.organizationId, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
     return sendSuccess(res, po, 'Purchase Order created', 201);
   } catch (err) { next(err); }
 };
@@ -41,6 +41,7 @@ exports.updatePO = async (req, res, next) => {
     if (!po) return sendError(res, 'Purchase Order not found', 404);
     if (['Complete', 'Cancelled'].includes(po.status)) return sendError(res, `Cannot edit a ${po.status} PO`, 400);
     Object.assign(po, req.body);
+    po.updatedAt = Date.now();
     await po.save();
     return sendSuccess(res, po, 'Purchase Order updated');
   } catch (err) { next(err); }
@@ -52,6 +53,7 @@ exports.cancelPO = async (req, res, next) => {
     if (!po) return sendError(res, 'Purchase Order not found', 404);
     if (po.status === 'Complete') return sendError(res, 'Cannot cancel a completed PO', 400);
     po.status = 'Cancelled';
+    po.updatedAt = Date.now();
     await po.save();
     return sendSuccess(res, po, 'Purchase Order cancelled');
   } catch (err) { next(err); }

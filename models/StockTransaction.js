@@ -11,6 +11,8 @@ const stockTransactionSchema = new mongoose.Schema(
     refId: { type: mongoose.Schema.Types.ObjectId },
     note: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

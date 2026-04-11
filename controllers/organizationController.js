@@ -22,7 +22,7 @@ exports.updateOrg = async (req, res, next) => {
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
-    const org = await Organization.findByIdAndUpdate(req.organizationId, updates, { new: true, runValidators: true });
+    const org = await Organization.findByIdAndUpdate(req.organizationId, { ...updates, updatedAt: Date.now() }, { new: true, runValidators: true });
     if (!org) return sendError(res, 'Organization not found', 404);
     return sendSuccess(res, org, 'Organization updated');
   } catch (err) {
@@ -59,6 +59,8 @@ exports.inviteUser = async (req, res, next) => {
       password,
       role: role || 'viewer',
       organization: req.organizationId,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     });
     return sendSuccess(res, { id: user._id, name: user.name, email: user.email, role: user.role }, 'User invited', 201);
   } catch (err) {
@@ -78,6 +80,7 @@ exports.updateMember = async (req, res, next) => {
 
     if (req.body.role) member.role = req.body.role;
     if (req.body.isActive !== undefined) member.isActive = req.body.isActive;
+    member.updatedAt = Date.now();
     await member.save();
 
     return sendSuccess(res, { id: member._id, name: member.name, role: member.role, isActive: member.isActive }, 'Member updated');

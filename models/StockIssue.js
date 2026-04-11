@@ -19,6 +19,8 @@ const stockIssueSchema = new mongoose.Schema(
     department: { type: String, trim: true },
     notes: { type: String, trim: true },
     issuedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

@@ -36,6 +36,8 @@ const salesInvoiceSchema = new mongoose.Schema(
     paidAmount: { type: Number, default: 0 },
     notes: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

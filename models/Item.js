@@ -13,6 +13,8 @@ const itemSchema = new mongoose.Schema(
     purchasePrice: { type: Number, default: 0 },
     gstRate: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

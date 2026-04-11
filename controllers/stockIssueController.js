@@ -61,13 +61,16 @@ exports.createIssue = async (req, res, next) => {
       department,
       notes,
       issuedBy: req.user.id,
-      status: 'Issued'
+      status: 'Issued',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     });
 
     // 3. Deduct stock and record transactions
     for (const update of inventoryUpdates) {
       const { inv, qty } = update;
       inv.currentStock -= qty;
+      inv.updatedAt = Date.now();
       await inv.save();
 
       await StockTransaction.create({
@@ -79,7 +82,9 @@ exports.createIssue = async (req, res, next) => {
         refModel: 'StockIssue',
         refId: issue._id,
         note: `Stock Issue to ${department || 'General'}`,
-        createdBy: req.user.id
+        createdBy: req.user.id,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
     }
 

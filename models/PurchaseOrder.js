@@ -31,6 +31,8 @@ const poSchema = new mongoose.Schema(
     notes: { type: String, trim: true },
     totalAmount: { type: Number, default: 0 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

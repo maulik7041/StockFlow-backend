@@ -37,8 +37,8 @@ exports.getItem = async (req, res, next) => {
 
 exports.createItem = async (req, res, next) => {
   try {
-    const item = await Item.create({ ...req.body, organization: req.organizationId });
-    await Inventory.create({ item: item._id, organization: req.organizationId, currentStock: 0 });
+    const item = await Item.create({ ...req.body, organization: req.organizationId, createdAt: Date.now(), updatedAt: Date.now() });
+    await Inventory.create({ item: item._id, organization: req.organizationId, currentStock: 0, createdAt: Date.now(), updatedAt: Date.now() });
     return sendSuccess(res, item, 'Item created', 201);
   } catch (err) { next(err); }
 };
@@ -47,7 +47,7 @@ exports.updateItem = async (req, res, next) => {
   try {
     const item = await Item.findOneAndUpdate(
       { _id: req.params.id, organization: req.organizationId },
-      req.body,
+      { ...req.body, updatedAt: Date.now() },
       { new: true, runValidators: true }
     );
     if (!item) return sendError(res, 'Item not found', 404);
@@ -59,7 +59,7 @@ exports.deleteItem = async (req, res, next) => {
   try {
     const item = await Item.findOneAndUpdate(
       { _id: req.params.id, organization: req.organizationId },
-      { isActive: false },
+      { isActive: false, updatedAt: Date.now() },
       { new: true }
     );
     if (!item) return sendError(res, 'Item not found', 404);

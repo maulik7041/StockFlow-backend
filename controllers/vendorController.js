@@ -24,14 +24,14 @@ exports.getVendor = async (req, res, next) => {
 
 exports.createVendor = async (req, res, next) => {
   try {
-    const vendor = await Vendor.create({ ...req.body, organization: req.organizationId });
+    const vendor = await Vendor.create({ ...req.body, organization: req.organizationId, createdAt: Date.now(), updatedAt: Date.now() });
     return sendSuccess(res, vendor, 'Vendor created', 201);
   } catch (err) { next(err); }
 };
 
 exports.updateVendor = async (req, res, next) => {
   try {
-    const vendor = await Vendor.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, req.body, { new: true, runValidators: true });
+    const vendor = await Vendor.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { ...req.body, updatedAt: Date.now() }, { new: true, runValidators: true });
     if (!vendor) return sendError(res, 'Vendor not found', 404);
     return sendSuccess(res, vendor, 'Vendor updated');
   } catch (err) { next(err); }
@@ -39,7 +39,7 @@ exports.updateVendor = async (req, res, next) => {
 
 exports.deleteVendor = async (req, res, next) => {
   try {
-    const vendor = await Vendor.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { isActive: false }, { new: true });
+    const vendor = await Vendor.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { isActive: false, updatedAt: Date.now() }, { new: true });
     if (!vendor) return sendError(res, 'Vendor not found', 404);
     return sendSuccess(res, null, 'Vendor deactivated');
   } catch (err) { next(err); }

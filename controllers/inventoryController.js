@@ -65,6 +65,7 @@ exports.adjustStock = async (req, res, next) => {
     }
 
     inv.currentStock = type === 'IN' ? inv.currentStock + quantity : inv.currentStock - quantity;
+    inv.updatedAt = Date.now();
     await inv.save();
 
     await StockTransaction.create({
@@ -76,6 +77,8 @@ exports.adjustStock = async (req, res, next) => {
       refModel: 'Adjustment',
       note,
       createdBy: req.user._id,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
 
     return sendSuccess(res, inv, 'Stock adjusted');

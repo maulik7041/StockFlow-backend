@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['admin', 'manager', 'viewer'], default: 'viewer' },
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

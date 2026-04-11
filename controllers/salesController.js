@@ -33,7 +33,7 @@ exports.getSale = async (req, res, next) => {
 
 exports.createSale = async (req, res, next) => {
   try {
-    const { customer, items, status, dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType } = req.body;
+    const { customer, items, status, invoiceDate, dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType } = req.body;
     const orgId = req.organizationId;
 
     for (const saleItem of items) {
@@ -43,12 +43,13 @@ exports.createSale = async (req, res, next) => {
       }
     }
 
-    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, organization: orgId, createdBy: req.user._id });
+    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', invoiceDate: invoiceDate || Date.now(), dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, organization: orgId, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Deduct stock
     for (const saleItem of items) {
       const inv = await Inventory.findOne({ item: saleItem.item, organization: orgId });
       inv.currentStock -= saleItem.quantity;
+      inv.updatedAt = Date.now();
       await inv.save();
 
       await StockTransaction.create({
@@ -61,6 +62,8 @@ exports.createSale = async (req, res, next) => {
         refId: invoice._id,
         note: `Invoice ${invoice.invoiceNumber}`,
         createdBy: req.user._id,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
     }
 
@@ -78,6 +81,7 @@ exports.updateSale = async (req, res, next) => {
     const isCancelling = req.body.status === 'Cancelled' && invoice.status !== 'Cancelled';
 
     Object.assign(invoice, req.body);
+    invoice.updatedAt = Date.now();
     await invoice.save();
 
     if (isCancelling) {
@@ -85,6 +89,7 @@ exports.updateSale = async (req, res, next) => {
         const inv = await Inventory.findOne({ item: saleItem.item, organization: req.organizationId });
         if (inv) {
           inv.currentStock += saleItem.quantity;
+          inv.updatedAt = Date.now();
           await inv.save();
 
           await StockTransaction.create({
@@ -97,6 +102,8 @@ exports.updateSale = async (req, res, next) => {
             refId: invoice._id,
             note: `Cancelled Invoice ${invoice.invoiceNumber}`,
             createdBy: req.user._id,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
           });
         }
       }

@@ -20,13 +20,14 @@ exports.register = async (req, res, next) => {
     if (exists) return sendError(res, 'Email already registered', 400);
 
     // Create organization
-    const org = await Organization.create({ name: orgName });
+    const org = await Organization.create({ name: orgName, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Create admin user linked to org
-    const user = await User.create({ name, email, password, role: 'admin', organization: org._id });
+    const user = await User.create({ name, email, password, role: 'admin', organization: org._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Set org owner
     org.owner = user._id;
+    org.updatedAt = Date.now();
     await org.save();
 
     const token = generateToken(user._id, org._id);

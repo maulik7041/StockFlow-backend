@@ -24,14 +24,14 @@ exports.getCustomer = async (req, res, next) => {
 
 exports.createCustomer = async (req, res, next) => {
   try {
-    const customer = await Customer.create({ ...req.body, organization: req.organizationId });
+    const customer = await Customer.create({ ...req.body, organization: req.organizationId, createdAt: Date.now(), updatedAt: Date.now() });
     return sendSuccess(res, customer, 'Customer created', 201);
   } catch (err) { next(err); }
 };
 
 exports.updateCustomer = async (req, res, next) => {
   try {
-    const customer = await Customer.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, req.body, { new: true, runValidators: true });
+    const customer = await Customer.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { ...req.body, updatedAt: Date.now() }, { new: true, runValidators: true });
     if (!customer) return sendError(res, 'Customer not found', 404);
     return sendSuccess(res, customer, 'Customer updated');
   } catch (err) { next(err); }
@@ -39,7 +39,7 @@ exports.updateCustomer = async (req, res, next) => {
 
 exports.deleteCustomer = async (req, res, next) => {
   try {
-    const customer = await Customer.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { isActive: false }, { new: true });
+    const customer = await Customer.findOneAndUpdate({ _id: req.params.id, organization: req.organizationId }, { isActive: false, updatedAt: Date.now() }, { new: true });
     if (!customer) return sendError(res, 'Customer not found', 404);
     return sendSuccess(res, null, 'Customer deactivated');
   } catch (err) { next(err); }
