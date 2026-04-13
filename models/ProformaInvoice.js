@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const saleItemSchema = new mongoose.Schema({
+const piItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
   hsnCode: { type: String, trim: true, default: '' },
   quantity: { type: Number, required: true, min: 1 },
@@ -9,19 +9,19 @@ const saleItemSchema = new mongoose.Schema({
   gstRate: { type: Number, default: 0 },
 });
 
-saleItemSchema.virtual('total').get(function () {
+piItemSchema.virtual('total').get(function () {
   const subtotal = this.quantity * this.unitPrice;
   return subtotal - (subtotal * this.discount) / 100;
 });
-saleItemSchema.set('toJSON', { virtuals: true });
-saleItemSchema.set('toObject', { virtuals: true });
+piItemSchema.set('toJSON', { virtuals: true });
+piItemSchema.set('toObject', { virtuals: true });
 
-const salesInvoiceSchema = new mongoose.Schema(
+const proformaInvoiceSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
-    invoiceNumber: { type: String },
+    piNumber: { type: String },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-    items: [saleItemSchema],
+    items: [piItemSchema],
     sameAsBilling: { type: Boolean, default: true },
     billingAddress: { type: String, trim: true },
     shippingAddress: { type: String, trim: true },
@@ -30,14 +30,12 @@ const salesInvoiceSchema = new mongoose.Schema(
     cgstAmount: { type: Number, default: 0 },
     sgstAmount: { type: Number, default: 0 },
     igstAmount: { type: Number, default: 0 },
-    status: { type: String, enum: ['Issued', 'Paid', 'Cancelled'], default: 'Issued' },
-    invoiceDate: { type: Date, default: Date.now },
-    dueDate: { type: Date },
+    status: { type: String, enum: ['Draft', 'Sent', 'Converted', 'Cancelled'], default: 'Draft' },
+    piDate: { type: Date, default: Date.now },
+    validUntil: { type: Date },
     totalAmount: { type: Number, default: 0 },
-    paidAmount: { type: Number, default: 0 },
     notes: { type: String, trim: true },
-    sourceDocumentType: { type: String, enum: ['ProformaInvoice', null], default: null },
-    sourceDocumentId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    convertedSalesInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'SalesInvoice', default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now },
@@ -46,18 +44,15 @@ const salesInvoiceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-salesInvoiceSchema.virtual('balanceDue').get(function () {
-  return this.totalAmount - this.paidAmount;
-});
-salesInvoiceSchema.set('toJSON', { virtuals: true });
-salesInvoiceSchema.set('toObject', { virtuals: true });
+proformaInvoiceSchema.set('toJSON', { virtuals: true });
+proformaInvoiceSchema.set('toObject', { virtuals: true });
 
-salesInvoiceSchema.index({ organization: 1, invoiceNumber: 1 }, { unique: true, sparse: true });
+proformaInvoiceSchema.index({ organization: 1, piNumber: 1 }, { unique: true, sparse: true });
 
-salesInvoiceSchema.pre('save', async function (next) {
-  if (!this.invoiceNumber) {
-    const count = await mongoose.model('SalesInvoice').countDocuments({ organization: this.organization });
-    this.invoiceNumber = `INV-${String(count + 1).padStart(5, '0')}`;
+proformaInvoiceSchema.pre('save', async function (next) {
+  if (!this.piNumber) {
+    const count = await mongoose.model('ProformaInvoice').countDocuments({ organization: this.organization });
+    this.piNumber = `PI-${String(count + 1).padStart(5, '0')}`;
   }
   let subtotal = 0;
   let totalTax = 0;
@@ -81,4 +76,4 @@ salesInvoiceSchema.pre('save', async function (next) {
   next();
 });
 
-module.exports = mongoose.model('SalesInvoice', salesInvoiceSchema);
+module.exports = mongoose.model('ProformaInvoice', proformaInvoiceSchema);

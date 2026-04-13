@@ -11,6 +11,7 @@ const itemSchema = new mongoose.Schema(
     reorderLevel: { type: Number, default: 0 },
     sellingPrice: { type: Number, default: 0 },
     purchasePrice: { type: Number, default: 0 },
+    hsnCode: { type: String, trim: true, default: '' },
     gstRate: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },

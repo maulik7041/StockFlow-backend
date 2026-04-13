@@ -17,6 +17,7 @@ const salesRoutes = require('./routes/sales');
 const reportRoutes = require('./routes/reports');
 const organizationRoutes = require('./routes/organizations');
 const stockIssueRoutes = require('./routes/stockIssueRoutes');
+const proformaInvoiceRoutes = require('./routes/proformaInvoices');
 
 // Connect to DB
 connectDB();
@@ -44,6 +45,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/stock-issues', stockIssueRoutes);
+app.use('/api/proforma-invoices', proformaInvoiceRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));

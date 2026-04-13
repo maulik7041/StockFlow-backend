@@ -25,7 +25,7 @@ exports.getSales = async (req, res, next) => {
 exports.getSale = async (req, res, next) => {
   try {
     const sale = await SalesInvoice.findOne({ _id: req.params.id, organization: req.organizationId })
-      .populate('customer').populate('items.item', 'name unit').populate('createdBy', 'name');
+      .populate('customer').populate('items.item', 'name unit hsnCode').populate('createdBy', 'name');
     if (!sale) return sendError(res, 'Invoice not found', 404);
     return sendSuccess(res, sale);
   } catch (err) { next(err); }
@@ -33,7 +33,7 @@ exports.getSale = async (req, res, next) => {
 
 exports.createSale = async (req, res, next) => {
   try {
-    const { customer, items, status, invoiceDate, dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType } = req.body;
+    const { customer, items, status, invoiceDate, dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, sourceDocumentType, sourceDocumentId } = req.body;
     const orgId = req.organizationId;
 
     for (const saleItem of items) {
@@ -43,7 +43,7 @@ exports.createSale = async (req, res, next) => {
       }
     }
 
-    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', invoiceDate: invoiceDate || Date.now(), dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, organization: orgId, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
+    const invoice = await SalesInvoice.create({ customer, items, status: status || 'Issued', invoiceDate: invoiceDate || Date.now(), dueDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, sourceDocumentType, sourceDocumentId, organization: orgId, createdBy: req.user._id, updatedBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Deduct stock
     for (const saleItem of items) {
@@ -80,7 +80,11 @@ exports.updateSale = async (req, res, next) => {
     if (invoice.status === 'Cancelled') return sendError(res, 'Cannot update a cancelled invoice', 400);
     const isCancelling = req.body.status === 'Cancelled' && invoice.status !== 'Cancelled';
 
+    // Track item changes for stock if items are being edited (not just status/payment)
+    const isEditingItems = req.body.items && JSON.stringify(req.body.items) !== JSON.stringify(invoice.items);
+
     Object.assign(invoice, req.body);
+    invoice.updatedBy = req.user._id;
     invoice.updatedAt = Date.now();
     await invoice.save();
 
