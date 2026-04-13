@@ -18,6 +18,7 @@ const reportRoutes = require('./routes/reports');
 const organizationRoutes = require('./routes/organizations');
 const stockIssueRoutes = require('./routes/stockIssueRoutes');
 const proformaInvoiceRoutes = require('./routes/proformaInvoices');
+const paymentRoutes = require('./routes/payments');
 
 // Connect to DB
 connectDB();
@@ -46,6 +47,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/stock-issues', stockIssueRoutes);
 app.use('/api/proforma-invoices', proformaInvoiceRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
@@ -54,7 +56,7 @@ app.use((req, res) => res.status(404).json({ success: false, message: 'Route not
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 BizzOps API running on http://localhost:${PORT}`);
 });
 

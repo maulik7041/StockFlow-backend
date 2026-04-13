@@ -8,6 +8,7 @@ exports.getPOs = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.status) filter.status = req.query.status;
+    if (req.query.paymentStatus) filter.paymentStatus = { $in: req.query.paymentStatus.split(',') };
     if (req.query.vendor) filter.vendor = req.query.vendor;
     if (req.query.search) filter.poNumber = { $regex: req.query.search, $options: 'i' };
 

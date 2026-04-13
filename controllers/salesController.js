@@ -11,6 +11,7 @@ exports.getSales = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.status) filter.status = req.query.status;
+    if (req.query.paymentStatus) filter.paymentStatus = { $in: req.query.paymentStatus.split(',') };
     if (req.query.customer) filter.customer = req.query.customer;
     if (req.query.search) filter.invoiceNumber = { $regex: req.query.search, $options: 'i' };
 
@@ -86,6 +87,11 @@ exports.updateSale = async (req, res, next) => {
     Object.assign(invoice, req.body);
     invoice.updatedBy = req.user._id;
     invoice.updatedAt = Date.now();
+    // Don't allow direct paidAmount override via update – use Payment API instead
+    if (req.body.paidAmount !== undefined && !isCancelling) {
+      // Only allow paidAmount changes through the payment controller
+      delete invoice.paidAmount;
+    }
     await invoice.save();
 
     if (isCancelling) {

@@ -101,10 +101,11 @@ exports.dashboardStats = async (req, res, next) => {
   try {
     const orgId = new mongoose.Types.ObjectId(req.organizationId);
 
-    const [allInv, pendingPOs, unpaidSales] = await Promise.all([
+    const [allInv, pendingPOs, unpaidSales, unpaidPOs] = await Promise.all([
       Inventory.find({ organization: orgId }).populate('item', 'reorderLevel purchasePrice'),
       PurchaseOrder.countDocuments({ organization: orgId, status: 'Draft' }),
-      SalesInvoice.find({ organization: orgId, status: { $in: ['Issued', 'Partial'] } }),
+      SalesInvoice.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid', 'Overdue'] } }),
+      PurchaseOrder.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid'] } }),
     ]);
 
     let totalStockValue = 0;
@@ -115,10 +116,18 @@ exports.dashboardStats = async (req, res, next) => {
       totalStockValue += inv.currentStock * (inv.item.purchasePrice || 0);
     }
 
-    let outstandingPayments = 0;
+    let receivableAmount = 0;
     for (const sale of unpaidSales) {
-      outstandingPayments += (sale.totalAmount - (sale.paidAmount || 0));
+      receivableAmount += (sale.totalAmount - (sale.paidAmount || 0));
     }
+
+    let payableAmount = 0;
+    for (const po of unpaidPOs) {
+      payableAmount += (po.totalAmount - (po.paidAmount || 0));
+    }
+
+    // Keep backward compat
+    const outstandingPayments = receivableAmount;
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -139,7 +148,9 @@ exports.dashboardStats = async (req, res, next) => {
     return sendSuccess(res, { 
       totalStockValue, 
       lowStockCount, 
-      outstandingPayments, 
+      outstandingPayments,
+      receivableAmount,
+      payableAmount,
       pendingPOs, 
       monthlyRevenue, 
       monthlyPurchases 

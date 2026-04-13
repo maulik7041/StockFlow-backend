@@ -35,6 +35,7 @@ const salesInvoiceSchema = new mongoose.Schema(
     dueDate: { type: Date },
     totalAmount: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 },
+    paymentStatus: { type: String, enum: ['Unpaid', 'Partially Paid', 'Paid', 'Overdue'], default: 'Unpaid' },
     notes: { type: String, trim: true },
     sourceDocumentType: { type: String, enum: ['ProformaInvoice', null], default: null },
     sourceDocumentId: { type: mongoose.Schema.Types.ObjectId, default: null },
@@ -78,6 +79,18 @@ salesInvoiceSchema.pre('save', async function (next) {
   }
 
   this.totalAmount = subtotal + (this.freightCharges || 0) + totalTax;
+
+  // Auto-calculate paymentStatus
+  if (this.status !== 'Cancelled') {
+    const paid = this.paidAmount || 0;
+    if (paid <= 0) {
+      this.paymentStatus = this.dueDate && new Date(this.dueDate) < new Date() ? 'Overdue' : 'Unpaid';
+    } else if (paid >= this.totalAmount) {
+      this.paymentStatus = 'Paid';
+    } else {
+      this.paymentStatus = this.dueDate && new Date(this.dueDate) < new Date() ? 'Overdue' : 'Partially Paid';
+    }
+  }
   next();
 });
 
