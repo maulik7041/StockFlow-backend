@@ -5,7 +5,6 @@ const poItemSchema = new mongoose.Schema({
   hsnCode: { type: String, trim: true, default: '' },
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true, min: 0 },
-  discount: { type: Number, default: 0 },
   gstRate: { type: Number, default: 0 },
   receivedQty: { type: Number, default: 0 },
 });
@@ -14,8 +13,7 @@ poItemSchema.virtual('pendingQty').get(function () {
   return this.quantity - this.receivedQty;
 });
 poItemSchema.virtual('total').get(function () {
-  const sub = this.quantity * this.unitPrice;
-  return sub - (sub * (this.discount || 0)) / 100;
+  return this.quantity * this.unitPrice;
 });
 poItemSchema.set('toJSON', { virtuals: true });
 poItemSchema.set('toObject', { virtuals: true });
@@ -59,7 +57,7 @@ poSchema.pre('save', async function (next) {
   let subtotal = 0;
   let totalTax = 0;
   this.items.forEach(i => {
-    const lineSub = (i.quantity * i.unitPrice) - ((i.quantity * i.unitPrice * (i.discount || 0)) / 100);
+    const lineSub = i.quantity * i.unitPrice;
     subtotal += lineSub;
     totalTax += lineSub * (i.gstRate || 0) / 100;
   });

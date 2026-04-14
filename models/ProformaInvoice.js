@@ -5,13 +5,11 @@ const piItemSchema = new mongoose.Schema({
   hsnCode: { type: String, trim: true, default: '' },
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true, min: 0 },
-  discount: { type: Number, default: 0 },
   gstRate: { type: Number, default: 0 },
 });
 
 piItemSchema.virtual('total').get(function () {
-  const subtotal = this.quantity * this.unitPrice;
-  return subtotal - (subtotal * this.discount) / 100;
+  return this.quantity * this.unitPrice;
 });
 piItemSchema.set('toJSON', { virtuals: true });
 piItemSchema.set('toObject', { virtuals: true });
@@ -57,7 +55,7 @@ proformaInvoiceSchema.pre('save', async function (next) {
   let subtotal = 0;
   let totalTax = 0;
   this.items.forEach(i => {
-    const lineSub = (i.quantity * i.unitPrice) - ((i.quantity * i.unitPrice * i.discount) / 100);
+    const lineSub = i.quantity * i.unitPrice;
     subtotal += lineSub;
     totalTax += lineSub * (i.gstRate || 0) / 100;
   });

@@ -5,13 +5,11 @@ const saleItemSchema = new mongoose.Schema({
   hsnCode: { type: String, trim: true, default: '' },
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true, min: 0 },
-  discount: { type: Number, default: 0 },
   gstRate: { type: Number, default: 0 },
 });
 
 saleItemSchema.virtual('total').get(function () {
-  const subtotal = this.quantity * this.unitPrice;
-  return subtotal - (subtotal * this.discount) / 100;
+  return this.quantity * this.unitPrice;
 });
 saleItemSchema.set('toJSON', { virtuals: true });
 saleItemSchema.set('toObject', { virtuals: true });
@@ -63,10 +61,15 @@ salesInvoiceSchema.pre('save', async function (next) {
   let subtotal = 0;
   let totalTax = 0;
   this.items.forEach(i => {
-    const lineSub = (i.quantity * i.unitPrice) - ((i.quantity * i.unitPrice * i.discount) / 100);
+    const lineSub = i.quantity * i.unitPrice;
     subtotal += lineSub;
     totalTax += lineSub * (i.gstRate || 0) / 100;
   });
+
+  // Add 18% GST on freight charges
+  const freight = this.freightCharges || 0;
+  const freightTax = freight * 0.18;
+  totalTax += freightTax;
 
   if (this.taxType === 'Inter-state (IGST)') {
     this.igstAmount = totalTax;
@@ -78,7 +81,7 @@ salesInvoiceSchema.pre('save', async function (next) {
     this.sgstAmount = totalTax / 2;
   }
 
-  this.totalAmount = subtotal + (this.freightCharges || 0) + totalTax;
+  this.totalAmount = subtotal + freight + totalTax;
 
   // Auto-calculate paymentStatus
   if (this.status !== 'Cancelled') {
