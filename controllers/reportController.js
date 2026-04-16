@@ -103,16 +103,18 @@ exports.dashboardStats = async (req, res, next) => {
 
     const [allInv, pendingPOs, unpaidSales, unpaidPOs] = await Promise.all([
       Inventory.find({ organization: orgId }).populate('item', 'reorderLevel purchasePrice'),
-      PurchaseOrder.countDocuments({ organization: orgId, status: 'Draft' }),
+      PurchaseOrder.countDocuments({ organization: orgId, status: 'Active' }),
       SalesInvoice.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid', 'Overdue'] } }),
       PurchaseOrder.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid'] } }),
     ]);
 
     let totalStockValue = 0;
     let lowStockCount = 0;
+    let outOfStockCount = 0;
     for (const inv of allInv) {
       if (!inv.item) continue;
-      if (inv.currentStock <= inv.item.reorderLevel) lowStockCount++;
+      if (inv.currentStock <= 0) outOfStockCount++;
+      else if (inv.currentStock <= inv.item.reorderLevel) lowStockCount++;
       totalStockValue += inv.currentStock * (inv.item.purchasePrice || 0);
     }
 
@@ -148,6 +150,7 @@ exports.dashboardStats = async (req, res, next) => {
     return sendSuccess(res, { 
       totalStockValue, 
       lowStockCount, 
+      outOfStockCount,
       outstandingPayments,
       receivableAmount,
       payableAmount,

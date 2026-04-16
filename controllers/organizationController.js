@@ -47,22 +47,26 @@ exports.getMembers = async (req, res, next) => {
 // @route POST /api/organization/invite
 exports.inviteUser = async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, modules } = req.body;
     if (!name || !email || !password) return sendError(res, 'name, email and password are required', 400);
 
-    const exists = await User.findOne({ email });
-    if (exists) return sendError(res, 'Email already registered', 400);
+    const exists = await User.findOne({ email, organization: req.organizationId });
+    if (exists) return sendError(res, 'Email already registered in this organization', 400);
+
+    const activeCount = await User.countDocuments({ organization: req.organizationId, isActive: true });
+    if (activeCount >= 4) return sendError(res, 'Maximum limit of 4 active users reached for this organization', 403);
 
     const user = await User.create({
       name,
       email,
       password,
       role: role || 'viewer',
+      modules: modules || [],
       organization: req.organizationId,
       createdAt: Date.now(),
       updatedAt: Date.now()
     });
-    return sendSuccess(res, { id: user._id, name: user.name, email: user.email, role: user.role }, 'User invited', 201);
+    return sendSuccess(res, { id: user._id, name: user.name, email: user.email, role: user.role, modules: user.modules }, 'User invited', 201);
   } catch (err) {
     next(err);
   }
@@ -78,12 +82,19 @@ exports.updateMember = async (req, res, next) => {
     // Prevent demoting/deactivating yourself
     if (member._id.equals(req.user._id)) return sendError(res, 'Cannot modify your own account this way', 400);
 
+    if (req.body.isActive === true && !member.isActive) {
+      const activeCount = await User.countDocuments({ organization: req.organizationId, isActive: true });
+      if (activeCount >= 4) return sendError(res, 'Maximum limit of 4 active users reached for this organization', 403);
+    }
+
     if (req.body.role) member.role = req.body.role;
     if (req.body.isActive !== undefined) member.isActive = req.body.isActive;
+    if (req.body.modules !== undefined) member.modules = req.body.modules;
+
     member.updatedAt = Date.now();
     await member.save();
 
-    return sendSuccess(res, { id: member._id, name: member.name, role: member.role, isActive: member.isActive }, 'Member updated');
+    return sendSuccess(res, { id: member._id, name: member.name, role: member.role, isActive: member.isActive, modules: member.modules }, 'Member updated');
   } catch (err) {
     next(err);
   }

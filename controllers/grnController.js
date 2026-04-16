@@ -31,7 +31,7 @@ exports.getGRN = async (req, res, next) => {
 
 exports.createGRN = async (req, res, next) => {
   try {
-    const { purchaseOrderId, items, notes, receivedAt } = req.body;
+    const { purchaseOrderId, items, notes, receivedAt, billNo, billDate } = req.body;
     const orgId = req.organizationId;
 
     const po = await PurchaseOrder.findOne({ _id: purchaseOrderId, organization: orgId });
@@ -47,7 +47,7 @@ exports.createGRN = async (req, res, next) => {
       }
     }
 
-    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
+    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, billNo, billDate, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     for (const grnItem of items) {
       let inv = await Inventory.findOne({ item: grnItem.item, organization: orgId });
@@ -87,4 +87,50 @@ exports.createGRN = async (req, res, next) => {
   } catch (err) {
     return sendError(res, err.message, 400);
   }
+};
+
+exports.cancelGRN = async (req, res, next) => {
+  try {
+    const grn = await GRN.findOne({ _id: req.params.id, organization: req.organizationId }).populate('purchaseOrder');
+    if (!grn) return sendError(res, 'GRN not found', 404);
+    if (grn.status === 'Cancelled') return sendError(res, 'GRN is already cancelled', 400);
+
+    for (const item of grn.items) {
+      let inv = await Inventory.findOne({ item: item.item, organization: req.organizationId });
+      if (inv) {
+        inv.currentStock -= item.receivedQty;
+        await inv.save();
+
+        await StockTransaction.create({
+          item: item.item,
+          organization: req.organizationId,
+          type: 'OUT',
+          quantity: item.receivedQty,
+          balanceAfter: inv.currentStock,
+          refModel: 'GRN',
+          refId: grn._id,
+          note: `Cancelled GRN ${grn.grnNumber}`,
+          createdBy: req.user._id,
+        });
+      }
+    }
+
+    const po = grn.purchaseOrder;
+    if (po) {
+      let allComplete = true;
+      for (const grnItem of grn.items) {
+        const poItem = po.items.find(i => i.item.toString() === grnItem.item.toString());
+        if (poItem) poItem.receivedQty = (poItem.receivedQty || 0) - grnItem.receivedQty;
+      }
+      po.items.forEach(i => {
+        if ((i.receivedQty || 0) < i.quantity) allComplete = false;
+      });
+      if (!allComplete && po.status === 'Complete') po.status = 'Active';
+      await po.save();
+    }
+
+    grn.status = 'Cancelled';
+    await grn.save();
+    return sendSuccess(res, grn, 'GRN Cancelled Successfully');
+  } catch(err) { next(err); }
 };

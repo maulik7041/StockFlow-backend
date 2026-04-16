@@ -13,4 +13,6 @@ router.route('/')
 router.route('/:id')
   .get(getIssue);
 
+router.route('/:id/cancel').patch(require('../controllers/stockIssueController').cancelStockIssue);
+
 module.exports = router;

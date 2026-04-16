@@ -91,3 +91,41 @@ exports.createIssue = async (req, res, next) => {
     return sendSuccess(res, issue, 'Stock issued successfully', 201);
   } catch (err) { next(err); }
 };
+
+exports.cancelStockIssue = async (req, res, next) => {
+  try {
+    const issue = await StockIssue.findOne({ _id: req.params.id, organization: req.organizationId });
+    if (!issue) return sendError(res, 'Stock Issue not found', 404);
+    if (issue.status === 'Cancelled') return sendError(res, 'Already cancelled', 400);
+
+    if (issue.status === 'Issued') {
+      for (const item of issue.items) {
+        let inv = await Inventory.findOne({ item: item.item, organization: req.organizationId });
+        if (inv) {
+          inv.currentStock += item.quantity;
+          inv.updatedAt = Date.now();
+          await inv.save();
+
+          await StockTransaction.create({
+            item: item.item,
+            organization: req.organizationId,
+            type: 'IN',
+            quantity: item.quantity,
+            balanceAfter: inv.currentStock,
+            refModel: 'StockIssue',
+            refId: issue._id,
+            note: `Cancelled Stock Issue ${issue.issueNumber}`,
+            createdBy: req.user._id,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    issue.status = 'Cancelled';
+    issue.updatedAt = Date.now();
+    await issue.save();
+    return sendSuccess(res, issue, 'Stock Issue Cancelled');
+  } catch(err) { next(err); }
+};

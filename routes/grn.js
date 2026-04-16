@@ -6,5 +6,6 @@ const { protect, authorize } = require('../middleware/auth');
 router.use(protect);
 router.route('/').get(getGRNs).post(authorize('admin', 'manager'), createGRN);
 router.route('/:id').get(getGRN);
+router.route('/:id/cancel').patch(authorize('admin', 'manager'), require('../controllers/grnController').cancelGRN);
 
 module.exports = router;

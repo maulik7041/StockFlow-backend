@@ -7,7 +7,6 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -15,11 +14,14 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['admin', 'manager', 'viewer'], default: 'viewer' },
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     isActive: { type: Boolean, default: true },
+    modules: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );
+
+userSchema.index({ email: 1, organization: 1 }, { unique: true });
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();

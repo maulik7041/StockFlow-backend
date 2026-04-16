@@ -15,9 +15,7 @@ exports.register = async (req, res, next) => {
     const { orgName, name, email, password } = req.body;
     if (!orgName) return sendError(res, 'Organization name is required', 400);
 
-    // Check email is not taken
-    const exists = await User.findOne({ email });
-    if (exists) return sendError(res, 'Email already registered', 400);
+
 
     // Create organization
     const org = await Organization.create({ name: orgName, createdAt: Date.now(), updatedAt: Date.now() });
@@ -35,7 +33,7 @@ exports.register = async (req, res, next) => {
       res,
       {
         token,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, modules: user.modules || [] },
         org: { id: org._id, name: org.name, slug: org.slug, plan: org.plan },
       },
       'Organization and admin account created',
@@ -50,25 +48,54 @@ exports.register = async (req, res, next) => {
 // @route POST /api/auth/login
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, organizationId } = req.body;
     if (!email || !password) return sendError(res, 'Please provide email and password', 400);
 
-    const user = await User.findOne({ email }).select('+password').populate('organization', 'name slug plan isActive');
-    if (!user || !(await user.matchPassword(password))) {
-      return sendError(res, 'Invalid credentials', 401);
-    }
-    if (!user.isActive) return sendError(res, 'Account deactivated', 403);
-    if (!user.organization?.isActive) return sendError(res, 'Organization is inactive', 403);
+    const users = await User.find({ email }).select('+password').populate('organization', 'name slug plan isActive');
+    if (!users || users.length === 0) return sendError(res, 'Invalid credentials', 401);
 
-    const token = generateToken(user._id, user.organization._id);
+    const validUsers = [];
+    for (const u of users) {
+      if (await u.matchPassword(password)) {
+        if (u.isActive && u.organization && u.organization.isActive) {
+          validUsers.push(u);
+        }
+      }
+    }
+
+    if (validUsers.length === 0) return sendError(res, 'Invalid credentials or inactive account', 401);
+
+    let selectedUser;
+
+    if (organizationId) {
+      selectedUser = validUsers.find(u => u.organization._id.toString() === organizationId);
+      if (!selectedUser) return sendError(res, 'Invalid organization selected', 401);
+    } else {
+      if (validUsers.length === 1) {
+        selectedUser = validUsers[0];
+      } else {
+        return res.json({
+          success: true,
+          data: {
+            requireOrgSelection: true,
+            organizations: validUsers.map(u => ({
+              organizationId: u.organization._id,
+              organizationName: u.organization.name
+            }))
+          }
+        });
+      }
+    }
+
+    const token = generateToken(selectedUser._id, selectedUser.organization._id);
     return sendSuccess(res, {
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: { id: selectedUser._id, name: selectedUser.name, email: selectedUser.email, role: selectedUser.role, modules: selectedUser.modules || [] },
       org: {
-        id: user.organization._id,
-        name: user.organization.name,
-        slug: user.organization.slug,
-        plan: user.organization.plan,
+        id: selectedUser.organization._id,
+        name: selectedUser.organization.name,
+        slug: selectedUser.organization.slug,
+        plan: selectedUser.organization.plan,
       },
     }, 'Login successful');
   } catch (err) {
@@ -81,7 +108,7 @@ exports.login = async (req, res, next) => {
 exports.getMe = async (req, res) => {
   const user = await User.findById(req.user._id).populate('organization', 'name slug plan settings');
   return sendSuccess(res, {
-    user: { id: user._id, name: user.name, email: user.email, role: user.role },
+    user: { id: user._id, name: user.name, email: user.email, role: user.role, modules: user.modules || [] },
     org: user.organization,
   }, 'User fetched');
 };
