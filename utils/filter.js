@@ -41,6 +41,21 @@ const getAdvancedFilter = (query) => {
       else if (config.type === 'exact' && config.val) {
         filter[key] = config.val;
       }
+      else if (config.type === 'financialYear' && Array.isArray(config.val) && config.val.length > 0) {
+        const ranges = config.val.map(fy => {
+          const startYear = parseInt(fy.split('-')[0]);
+          const start = new Date(startYear, 3, 1, 0, 0, 0, 0);
+          const end = new Date(startYear + 1, 2, 31, 23, 59, 59, 999);
+          return { [key]: { $gte: start, $lte: end } };
+        });
+        
+        if (ranges.length === 1) {
+          filter[key] = Object.values(ranges[0])[0];
+        } else {
+          if (!filter.$and) filter.$and = [];
+          filter.$and.push({ $or: ranges });
+        }
+      }
     }
     
     return filter;
