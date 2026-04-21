@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Inventory = require('../models/Inventory');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const PurchaseBill = require('../models/PurchaseBill');
 const SalesInvoice = require('../models/SalesInvoice');
 const StockTransaction = require('../models/StockTransaction');
 const Item = require('../models/Item');
@@ -85,8 +86,8 @@ exports.profitReport = async (req, res, next) => {
     }
 
     const purchaseMatch = { organization: orgId, status: { $ne: 'Cancelled' } };
-    const pos = await PurchaseOrder.find(purchaseMatch);
-    const purchaseSpend = pos.reduce((s, p) => s + p.totalAmount, 0);
+    const bills = await PurchaseBill.find(purchaseMatch);
+    const purchaseSpend = bills.reduce((s, p) => s + p.totalAmount, 0);
 
     return sendSuccess(res, {
       revenue, costOfGoods,
@@ -101,11 +102,11 @@ exports.dashboardStats = async (req, res, next) => {
   try {
     const orgId = new mongoose.Types.ObjectId(req.organizationId);
 
-    const [allInv, pendingPOs, unpaidSales, unpaidPOs] = await Promise.all([
+    const [allInv, pendingPOs, unpaidSales, unpaidBills] = await Promise.all([
       Inventory.find({ organization: orgId }).populate('item', 'reorderLevel purchasePrice'),
       PurchaseOrder.countDocuments({ organization: orgId, status: 'Active' }),
       SalesInvoice.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid', 'Overdue'] } }),
-      PurchaseOrder.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid'] } }),
+      PurchaseBill.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $in: ['Unpaid', 'Partially Paid'] } }),
     ]);
 
     let totalStockValue = 0;
@@ -120,12 +121,14 @@ exports.dashboardStats = async (req, res, next) => {
 
     let receivableAmount = 0;
     for (const sale of unpaidSales) {
-      receivableAmount += (sale.totalAmount - (sale.paidAmount || 0));
+      const net = (sale.totalAmount + (sale.dnAmount || 0) - (sale.cnAmount || 0));
+      receivableAmount += Math.max(0, net - (sale.paidAmount || 0));
     }
 
     let payableAmount = 0;
-    for (const po of unpaidPOs) {
-      payableAmount += (po.totalAmount - (po.paidAmount || 0));
+    for (const bill of unpaidBills) {
+      const net = (bill.totalAmount + (bill.cnAmount || 0) - (bill.dnAmount || 0));
+      payableAmount += Math.max(0, net - (bill.paidAmount || 0));
     }
 
     // Keep backward compat
@@ -140,9 +143,9 @@ exports.dashboardStats = async (req, res, next) => {
         { $group: { _id: { year: { $year: '$invoiceDate' }, month: { $month: '$invoiceDate' } }, revenue: { $sum: '$totalAmount' } } },
         { $sort: { '_id.year': 1, '_id.month': 1 } },
       ]),
-      PurchaseOrder.aggregate([
-        { $match: { organization: orgId, status: { $in: ['Complete', 'Sent', 'Partial'] }, createdAt: { $gte: sixMonthsAgo } } },
-        { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } }, purchases: { $sum: '$totalAmount' } } },
+      PurchaseBill.aggregate([
+        { $match: { organization: orgId, status: { $ne: 'Cancelled' }, billDate: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { year: { $year: '$billDate' }, month: { $month: '$billDate' } }, purchases: { $sum: '$totalAmount' } } },
         { $sort: { '_id.year': 1, '_id.month': 1 } },
       ])
     ]);
@@ -158,5 +161,87 @@ exports.dashboardStats = async (req, res, next) => {
       monthlyRevenue, 
       monthlyPurchases 
     });
+  } catch (err) { next(err); }
+};
+
+exports.getOutstandingReport = async (req, res, next) => {
+  try {
+    const orgId = new mongoose.Types.ObjectId(req.organizationId);
+    const { type } = req.query; // 'receivable' or 'payable'
+
+    if (type === 'receivable') {
+      const invoices = await SalesInvoice.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $ne: 'Paid' } }).populate('customer', 'name');
+      
+      const billWise = invoices.map(inv => ({
+        id: inv._id,
+        number: inv.invoiceNumber,
+        date: inv.invoiceDate,
+        party: inv.customer?.name || 'Unknown',
+        total: inv.totalAmount,
+        adjustments: (inv.dnAmount || 0) - (inv.cnAmount || 0),
+        netTotal: inv.totalAmount + (inv.dnAmount || 0) - (inv.cnAmount || 0),
+        paid: inv.paidAmount || 0,
+        balance: inv.balanceDue
+      }));
+
+      const partyMap = {};
+      invoices.forEach(inv => {
+        const pId = inv.customer?._id?.toString() || 'unknown';
+        if (!partyMap[pId]) {
+          partyMap[pId] = {
+            party: inv.customer?.name || 'Unknown',
+            totalInvoiced: 0,
+            totalPaid: 0,
+            totalAdjustments: 0,
+            outstanding: 0,
+            billCount: 0
+          };
+        }
+        partyMap[pId].totalInvoiced += inv.totalAmount;
+        partyMap[pId].totalPaid += (inv.paidAmount || 0);
+        partyMap[pId].totalAdjustments += ((inv.dnAmount || 0) - (inv.cnAmount || 0));
+        partyMap[pId].outstanding += inv.balanceDue;
+        partyMap[pId].billCount += 1;
+      });
+
+      return sendSuccess(res, { billWise, partyWise: Object.values(partyMap) });
+
+    } else {
+      const bills = await PurchaseBill.find({ organization: orgId, status: { $ne: 'Cancelled' }, paymentStatus: { $ne: 'Paid' } }).populate('vendor', 'name');
+
+      const billWise = bills.map(bill => ({
+        id: bill._id,
+        number: bill.billNumber,
+        date: bill.billDate,
+        party: bill.vendor?.name || 'Unknown',
+        total: bill.totalAmount,
+        adjustments: (bill.cnAmount || 0) - (bill.dnAmount || 0),
+        netTotal: bill.totalAmount + (bill.cnAmount || 0) - (bill.dnAmount || 0),
+        paid: bill.paidAmount || 0,
+        balance: bill.balanceDue
+      }));
+
+      const partyMap = {};
+      bills.forEach(bill => {
+        const pId = bill.vendor?._id?.toString() || 'unknown';
+        if (!partyMap[pId]) {
+          partyMap[pId] = {
+            party: bill.vendor?.name || 'Unknown',
+            totalInvoiced: 0,
+            totalPaid: 0,
+            totalAdjustments: 0,
+            outstanding: 0,
+            billCount: 0
+          };
+        }
+        partyMap[pId].totalInvoiced += bill.totalAmount;
+        partyMap[pId].totalPaid += (bill.paidAmount || 0);
+        partyMap[pId].totalAdjustments += ((bill.cnAmount || 0) - (bill.dnAmount || 0));
+        partyMap[pId].outstanding += bill.balanceDue;
+        partyMap[pId].billCount += 1;
+      });
+
+      return sendSuccess(res, { billWise, partyWise: Object.values(partyMap) });
+    }
   } catch (err) { next(err); }
 };

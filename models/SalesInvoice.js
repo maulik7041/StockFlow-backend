@@ -33,6 +33,8 @@ const salesInvoiceSchema = new mongoose.Schema(
     dueDate: { type: Date },
     totalAmount: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 },
+    cnAmount: { type: Number, default: 0 },
+    dnAmount: { type: Number, default: 0 },
     paymentStatus: { type: String, enum: ['Unpaid', 'Partially Paid', 'Paid', 'Overdue'], default: 'Unpaid' },
     notes: { type: String, trim: true },
     sourceDocumentType: { type: String, enum: ['ProformaInvoice', null], default: null },
@@ -46,7 +48,7 @@ const salesInvoiceSchema = new mongoose.Schema(
 );
 
 salesInvoiceSchema.virtual('balanceDue').get(function () {
-  return this.totalAmount - this.paidAmount;
+  return (this.totalAmount + (this.dnAmount || 0) - (this.cnAmount || 0)) - (this.paidAmount || 0);
 });
 salesInvoiceSchema.set('toJSON', { virtuals: true });
 salesInvoiceSchema.set('toObject', { virtuals: true });
@@ -86,9 +88,14 @@ salesInvoiceSchema.pre('save', async function (next) {
   // Auto-calculate paymentStatus
   if (this.status !== 'Cancelled') {
     const paid = this.paidAmount || 0;
+    const netTotal = (this.totalAmount + (this.dnAmount || 0) - (this.cnAmount || 0));
     if (paid <= 0) {
-      this.paymentStatus = this.dueDate && new Date(this.dueDate) < new Date() ? 'Overdue' : 'Unpaid';
-    } else if (paid >= this.totalAmount) {
+      if (netTotal <= 0 && (this.dnAmount || this.cnAmount)) {
+          this.paymentStatus = 'Paid'; // Fully adjusted by notes
+      } else {
+          this.paymentStatus = this.dueDate && new Date(this.dueDate) < new Date() ? 'Overdue' : 'Unpaid';
+      }
+    } else if (paid >= netTotal) {
       this.paymentStatus = 'Paid';
     } else {
       this.paymentStatus = this.dueDate && new Date(this.dueDate) < new Date() ? 'Overdue' : 'Partially Paid';

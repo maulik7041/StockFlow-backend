@@ -32,8 +32,6 @@ const poSchema = new mongoose.Schema(
     expectedDate: { type: Date },
     notes: { type: String, trim: true },
     totalAmount: { type: Number, default: 0 },
-    paidAmount: { type: Number, default: 0 },
-    paymentStatus: { type: String, enum: ['Unpaid', 'Partially Paid', 'Paid'], default: 'Unpaid' },
     freightCharges: { type: Number, default: 0 },
     taxType: { type: String, enum: ['Intra-state (CGST+SGST)', 'Inter-state (IGST)'], default: 'Intra-state (CGST+SGST)' },
     cgstAmount: { type: Number, default: 0 },
@@ -74,17 +72,6 @@ poSchema.pre('save', async function (next) {
 
   this.totalAmount = subtotal + (this.freightCharges || 0) + totalTax;
 
-  // Auto-calculate paymentStatus
-  if (this.status !== 'Cancelled') {
-    const paid = this.paidAmount || 0;
-    if (paid <= 0) {
-      this.paymentStatus = 'Unpaid';
-    } else if (paid >= this.totalAmount) {
-      this.paymentStatus = 'Paid';
-    } else {
-      this.paymentStatus = 'Partially Paid';
-    }
-  }
   next();
 });
 

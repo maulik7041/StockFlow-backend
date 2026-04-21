@@ -31,7 +31,7 @@ exports.getGRN = async (req, res, next) => {
 
 exports.createGRN = async (req, res, next) => {
   try {
-    const { purchaseOrderId, items, notes, receivedAt, billNo, billDate } = req.body;
+    const { purchaseOrderId, items, notes, receivedAt } = req.body;
     const orgId = req.organizationId;
 
     const po = await PurchaseOrder.findOne({ _id: purchaseOrderId, organization: orgId });
@@ -47,7 +47,7 @@ exports.createGRN = async (req, res, next) => {
       }
     }
 
-    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, billNo, billDate, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
+    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     for (const grnItem of items) {
       let inv = await Inventory.findOne({ item: grnItem.item, organization: orgId });

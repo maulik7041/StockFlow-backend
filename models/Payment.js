@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const allocationSchema = new mongoose.Schema({
-  documentType: { type: String, enum: ['SalesInvoice', 'PurchaseOrder'], required: true },
+  documentType: { type: String, enum: ['SalesInvoice', 'PurchaseBill'], required: true },
   documentId: { type: mongoose.Schema.Types.ObjectId, required: true },
   amount: { type: Number, required: true, min: 0.01 },
 }, { _id: false });
@@ -9,10 +9,8 @@ const allocationSchema = new mongoose.Schema({
 const paymentSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
-    // Legacy single-document fields (kept for backward compat queries)
-    documentType: { type: String, enum: ['SalesInvoice', 'PurchaseOrder'] },
+    documentType: { type: String, enum: ['SalesInvoice', 'PurchaseBill'] },
     documentId: { type: mongoose.Schema.Types.ObjectId, index: true },
-    // New: multi-document allocations
     allocations: [allocationSchema],
     // Party info
     partyType: { type: String, enum: ['Customer', 'Vendor'] },

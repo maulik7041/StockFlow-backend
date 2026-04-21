@@ -1,13 +1,13 @@
 const Payment = require('../models/Payment');
 const SalesInvoice = require('../models/SalesInvoice');
-const PurchaseOrder = require('../models/PurchaseOrder');
+const PurchaseBill = require('../models/PurchaseBill');
 const Customer = require('../models/Customer');
 const Vendor = require('../models/Vendor');
 const { sendSuccess, sendError } = require('../utils/response');
 const { getAdvancedFilter } = require('../utils/filter');
 const mongoose = require('mongoose');
 
-// Record a single payment against one document (backward-compatible)
+// Record a single payment against one document
 exports.recordPayment = async (req, res, next) => {
   try {
     const { documentType, documentId, amount, paymentDate, mode, referenceNumber, notes } = req.body;
@@ -23,8 +23,8 @@ exports.recordPayment = async (req, res, next) => {
       document = await SalesInvoice.findOne({ _id: documentId, organization: orgId }).populate('customer', 'name');
       partyType = 'Customer';
       partyId = document?.customer?._id;
-    } else if (documentType === 'PurchaseOrder') {
-      document = await PurchaseOrder.findOne({ _id: documentId, organization: orgId }).populate('vendor', 'name');
+    } else if (documentType === 'PurchaseBill') {
+      document = await PurchaseBill.findOne({ _id: documentId, organization: orgId }).populate('vendor', 'name');
       partyType = 'Vendor';
       partyId = document?.vendor?._id;
     } else {
@@ -83,7 +83,7 @@ exports.recordBulkPayment = async (req, res, next) => {
     }
 
     // Determine document type based on party type
-    const expectedDocType = partyType === 'Customer' ? 'SalesInvoice' : 'PurchaseOrder';
+    const expectedDocType = partyType === 'Customer' ? 'SalesInvoice' : 'PurchaseBill';
 
     // Phase 1: Validate ALL allocations first (no writes)
     const docsToUpdate = [];
@@ -92,14 +92,14 @@ exports.recordBulkPayment = async (req, res, next) => {
         return sendError(res, `Invalid document type ${alloc.documentType} for ${partyType}`, 400);
       }
       if (!alloc.documentId || !alloc.amount || +alloc.amount <= 0) {
-        return sendError(res, 'Remove invoices/POs with ₹0 allocation before recording payment', 400);
+        return sendError(res, 'Remove invoices/bills with ₹0 allocation before recording payment', 400);
       }
 
       let doc;
       if (alloc.documentType === 'SalesInvoice') {
         doc = await SalesInvoice.findOne({ _id: alloc.documentId, organization: orgId });
       } else {
-        doc = await PurchaseOrder.findOne({ _id: alloc.documentId, organization: orgId });
+        doc = await PurchaseBill.findOne({ _id: alloc.documentId, organization: orgId });
       }
 
       if (!doc) return sendError(res, `Document ${alloc.documentId} not found`, 404);
@@ -123,7 +123,6 @@ exports.recordBulkPayment = async (req, res, next) => {
     // Create single payment record with all allocations
     const payment = await Payment.create({
       organization: orgId,
-      // Legacy fields: set to first allocation for basic compat
       documentType: allocations[0].documentType,
       documentId: allocations[0].documentId,
       allocations: allocations.map(a => ({
@@ -180,22 +179,22 @@ exports.getUnpaidDocuments = async (req, res, next) => {
         paymentStatus: inv.paymentStatus,
       }));
     } else if (partyType === 'Vendor') {
-      const pos = await PurchaseOrder.find({
+      const bills = await PurchaseBill.find({
         organization: orgId,
         vendor: partyId,
         status: { $ne: 'Cancelled' },
         $expr: { $gt: ['$totalAmount', { $ifNull: ['$paidAmount', 0] }] }
-      }).select('poNumber createdAt totalAmount paidAmount paymentStatus').sort({ createdAt: 1 });
+      }).select('billNumber billDate totalAmount paidAmount paymentStatus').sort({ billDate: 1 });
 
-      documents = pos.map(po => ({
-        _id: po._id,
-        documentType: 'PurchaseOrder',
-        documentNumber: po.poNumber,
-        date: po.createdAt,
-        totalAmount: po.totalAmount,
-        paidAmount: po.paidAmount || 0,
-        balance: po.totalAmount - (po.paidAmount || 0),
-        paymentStatus: po.paymentStatus,
+      documents = bills.map(bill => ({
+        _id: bill._id,
+        documentType: 'PurchaseBill',
+        documentNumber: bill.billNumber,
+        date: bill.billDate,
+        totalAmount: bill.totalAmount,
+        paidAmount: bill.paidAmount || 0,
+        balance: bill.totalAmount - (bill.paidAmount || 0),
+        paymentStatus: bill.paymentStatus,
       }));
     } else {
       return sendError(res, 'Invalid partyType', 400);
@@ -216,9 +215,7 @@ exports.getPayments = async (req, res, next) => {
 
     let query = { organization: orgId, ...getAdvancedFilter(req.query) };
     
-    // Support legacy documentType/documentId if passed directly
     if (req.query.documentType && !req.query.documentId) {
-      // When filtering by type only (e.g. from Payments Ledger), search in both legacy and allocations
       query.$or = [
         { documentType: req.query.documentType },
         { 'allocations.documentType': req.query.documentType }
@@ -226,14 +223,12 @@ exports.getPayments = async (req, res, next) => {
       delete query.documentType;
     }
     if (req.query.documentId) {
-      // Search in both legacy field and allocations array
       const docId = req.query.documentId;
       const orConditions = [
         { documentId: docId },
         { 'allocations.documentId': new mongoose.Types.ObjectId(docId) }
       ];
       if (query.$or) {
-        // Combine with existing $or using $and
         query.$and = [{ $or: query.$or }, { $or: orConditions }];
         delete query.$or;
       } else {
@@ -241,7 +236,6 @@ exports.getPayments = async (req, res, next) => {
       }
       delete query.documentId;
       if (req.query.documentType) {
-        // Also filter by document type when both are provided
         delete query.documentType;
       }
     }
@@ -266,18 +260,18 @@ exports.getPayments = async (req, res, next) => {
       const matchedSIs = await SalesInvoice.find(siMatchQuery).select('_id');
       matchedSIs.forEach(si => matchIds.push(si._id));
 
-      // 2. Search Purchase Orders
-      const poMatchQuery = { organization: orgId };
-      const poOrConditions = [];
-      if (docNumFilter?.val) poOrConditions.push({ poNumber: { $regex: docNumFilter.val, $options: 'i' } });
+      // 2. Search Purchase Bills
+      const pbMatchQuery = { organization: orgId };
+      const pbOrConditions = [];
+      if (docNumFilter?.val) pbOrConditions.push({ billNumber: { $regex: docNumFilter.val, $options: 'i' } });
       if (partyFilter?.val) {
         const vendors = await Vendor.find({ organization: orgId, name: { $regex: partyFilter.val, $options: 'i' } }).select('_id');
-        poOrConditions.push({ vendor: { $in: vendors.map(v => v._id) } });
+        pbOrConditions.push({ vendor: { $in: vendors.map(v => v._id) } });
       }
-      if (poOrConditions.length > 0) poMatchQuery.$or = poOrConditions;
+      if (pbOrConditions.length > 0) pbMatchQuery.$or = pbOrConditions;
 
-      const matchedPOs = await PurchaseOrder.find(poMatchQuery).select('_id');
-      matchedPOs.forEach(po => matchIds.push(po._id));
+      const matchedPBs = await PurchaseBill.find(pbMatchQuery).select('_id');
+      matchedPBs.forEach(pb => matchIds.push(pb._id));
 
       // Search in both legacy and allocations
       query.$or = [
@@ -303,10 +297,10 @@ exports.getPayments = async (req, res, next) => {
     });
 
     const siIds = allDocRefs.filter(r => r.type === 'SalesInvoice').map(r => r.id);
-    const poIds = allDocRefs.filter(r => r.type === 'PurchaseOrder').map(r => r.id);
+    const pbIds = allDocRefs.filter(r => r.type === 'PurchaseBill').map(r => r.id);
 
     const invoices = await SalesInvoice.find({ _id: { $in: siIds } }, 'invoiceNumber customer').populate('customer', 'name');
-    const pos = await PurchaseOrder.find({ _id: { $in: poIds } }, 'poNumber vendor').populate('vendor', 'name');
+    const bills = await PurchaseBill.find({ _id: { $in: pbIds } }, 'billNumber vendor').populate('vendor', 'name');
 
     const paymentData = payments.map(p => {
       const obj = p.toObject();
@@ -318,8 +312,8 @@ exports.getPayments = async (req, res, next) => {
             const inv = invoices.find(i => i._id.toString() === a.documentId.toString());
             return { ...a, documentNumber: inv ? inv.invoiceNumber : 'Deleted', partyName: inv?.customer?.name || 'Unknown' };
           } else {
-            const po = pos.find(i => i._id.toString() === a.documentId.toString());
-            return { ...a, documentNumber: po ? po.poNumber : 'Deleted', partyName: po?.vendor?.name || 'Unknown' };
+            const bill = bills.find(i => i._id.toString() === a.documentId.toString());
+            return { ...a, documentNumber: bill ? bill.billNumber : 'Deleted', partyName: bill?.vendor?.name || 'Unknown' };
           }
         });
         // For top-level display
@@ -334,15 +328,15 @@ exports.getPayments = async (req, res, next) => {
           }
         }
       } else {
-        // Legacy single-document payment
+        // Single-document payment
         if (p.documentType === 'SalesInvoice') {
           const inv = invoices.find(i => i._id.toString() === p.documentId?.toString());
           obj.documentNumber = inv ? inv.invoiceNumber : 'Deleted';
           obj.partyName = inv?.customer?.name || 'Unknown';
         } else {
-          const po = pos.find(i => i._id.toString() === p.documentId?.toString());
-          obj.documentNumber = po ? po.poNumber : 'Deleted';
-          obj.partyName = po?.vendor?.name || 'Unknown';
+          const bill = bills.find(i => i._id.toString() === p.documentId?.toString());
+          obj.documentNumber = bill ? bill.billNumber : 'Deleted';
+          obj.partyName = bill?.vendor?.name || 'Unknown';
         }
       }
       return obj;

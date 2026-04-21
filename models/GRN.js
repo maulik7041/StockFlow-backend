@@ -17,8 +17,6 @@ const grnSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     grnNumber: { type: String },
-    billNo: { type: String, trim: true },
-    billDate: { type: Date },
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
     items: [grnItemSchema],
     receivedAt: { type: Date, default: Date.now },

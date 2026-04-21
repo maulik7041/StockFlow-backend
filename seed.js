@@ -10,6 +10,13 @@ const Vendor = require('./models/Vendor')
 const Customer = require('./models/Customer')
 const StockIssue = require('./models/StockIssue')
 const StockTransaction = require('./models/StockTransaction')
+const PurchaseOrder = require('./models/PurchaseOrder')
+const PurchaseBill = require('./models/PurchaseBill')
+const SalesInvoice = require('./models/SalesInvoice')
+const GRN = require('./models/GRN')
+const CreditNote = require('./models/CreditNote')
+const DebitNote = require('./models/DebitNote')
+const Payment = require('./models/Payment')
 
 const seed = async () => {
   await connectDB()
@@ -145,6 +152,123 @@ const seed = async () => {
         }
       }
       console.log('✅ Sample stock issues simulated');
+    }
+  }
+
+  // Generate Sample Purchase Flow
+  if (!(await PurchaseBill.findOne({ organization: org._id }))) {
+    const vendor = await Vendor.findOne({ organization: org._id });
+    const tradingItem = await Item.findOne({ organization: org._id, itemType: 'trading_item' });
+    
+    if (vendor && tradingItem) {
+      // 1. PO
+      const po = await PurchaseOrder.create({
+        organization: org._id,
+        vendor: vendor._id,
+        items: [{ item: tradingItem._id, quantity: 20, unitPrice: tradingItem.purchasePrice, gstRate: 18 }],
+        status: 'Active',
+        createdBy: admin._id
+      });
+      console.log('✅ Sample PO created');
+
+      // 2. GRN
+      const grn = await GRN.create({
+        organization: org._id,
+        purchaseOrder: po._id,
+        createdBy: admin._id,
+        items: [{ item: tradingItem._id, orderedQty: 20, receivedQty: 20, unitPrice: tradingItem.purchasePrice }],
+        totalAmount: po.totalAmount
+      });
+      po.items[0].receivedQty = 20;
+      po.status = 'Complete';
+      await po.save();
+      console.log('✅ Sample GRN created');
+
+      // 3. Purchase Bill
+      const bill = await PurchaseBill.create({
+        organization: org._id,
+        vendor: vendor._id,
+        purchaseOrder: po._id,
+        grn: grn._id,
+        billDate: new Date(),
+        items: [{ item: tradingItem._id, quantity: 20, unitPrice: tradingItem.purchasePrice, gstRate: 18 }],
+        taxType: 'Intra-state (CGST+SGST)',
+        createdBy: admin._id
+      });
+      console.log('✅ Sample Purchase Bill created');
+
+      // 4. Record Partial Payment
+      const paid = 5000;
+      await Payment.create({
+        organization: org._id,
+        partyType: 'Vendor',
+        partyId: vendor._id,
+        amount: paid,
+        paymentDate: new Date(),
+        mode: 'Bank Transfer',
+        documentType: 'PurchaseBill',
+        documentId: bill._id,
+        createdBy: admin._id
+      });
+      bill.paidAmount = paid;
+      bill.paymentStatus = 'Partially Paid';
+      await bill.save();
+      console.log('✅ Sample Payment recorded against Bill');
+    }
+  }
+
+  // Generate Sample Sales Invoice + Credit Note
+  if (!(await CreditNote.findOne({ organization: org._id }))) {
+    const customer = await Customer.findOne({ organization: org._id });
+    const finishedGood = await Item.findOne({ organization: org._id, itemType: 'finished_good' });
+
+    if (customer && finishedGood) {
+      const invoice = await SalesInvoice.create({
+        organization: org._id,
+        customer: customer._id,
+        invoiceDate: new Date(),
+        items: [{ item: finishedGood._id, quantity: 5, unitPrice: finishedGood.sellingPrice, gstRate: 18 }],
+        taxType: 'Intra-state (CGST+SGST)',
+        createdBy: admin._id,
+        status: 'Issued'
+      });
+      console.log('✅ Sample Sales Invoice created');
+
+      await CreditNote.create({
+        organization: org._id,
+        partyType: 'Customer',
+        party: customer._id,
+        referenceDocumentType: 'SalesInvoice',
+        referenceDocumentId: invoice._id,
+        noteDate: new Date(),
+        items: [{ item: finishedGood._id, quantity: 1, unitPrice: finishedGood.sellingPrice, gstRate: 18 }],
+        taxType: 'Intra-state (CGST+SGST)',
+        createdBy: admin._id,
+        notes: 'Customer returned 1 unit due to packaging damage'
+      });
+      console.log('✅ Sample Credit Note created against Invoice');
+    }
+  }
+
+  // Generate Sample Debit Note against Purchase Bill
+  if (!(await DebitNote.findOne({ organization: org._id }))) {
+    const vendor = await Vendor.findOne({ organization: org._id });
+    const bill = await PurchaseBill.findOne({ organization: org._id });
+
+    if (vendor && bill) {
+      await DebitNote.create({
+        organization: org._id,
+        partyType: 'Vendor',
+        party: vendor._id,
+        referenceDocumentType: 'PurchaseBill',
+        referenceDocumentId: bill._id,
+        noteDate: new Date(),
+        items: [{ item: bill.items[0].item, quantity: 1, unitPrice: 100, gstRate: 18 }],
+        taxType: 'Intra-state (CGST+SGST)',
+        createdBy: admin._id,
+        notes: 'Price correction — vendor undercharged on one unit'
+      });
+      console.log('✅ Sample Debit Note created against Purchase Bill');
     }
   }
 
