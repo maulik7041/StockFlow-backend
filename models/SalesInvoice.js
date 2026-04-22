@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const saleItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -57,8 +58,7 @@ salesInvoiceSchema.index({ organization: 1, invoiceNumber: 1 }, { unique: true, 
 
 salesInvoiceSchema.pre('save', async function (next) {
   if (!this.invoiceNumber) {
-    const count = await mongoose.model('SalesInvoice').countDocuments({ organization: this.organization });
-    this.invoiceNumber = `INV-${String(count + 1).padStart(5, '0')}`;
+    this.invoiceNumber = await generateNextNumber(this.organization, 'SalesInvoice', this.invoiceDate);
   }
   let subtotal = 0;
   let totalTax = 0;

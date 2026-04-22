@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const grnItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -34,8 +35,7 @@ grnSchema.index({ organization: 1, grnNumber: 1 }, { unique: true, sparse: true 
 
 grnSchema.pre('save', async function (next) {
   if (!this.grnNumber) {
-    const count = await mongoose.model('GRN').countDocuments({ organization: this.organization });
-    this.grnNumber = `GRN-${String(count + 1).padStart(5, '0')}`;
+    this.grnNumber = await generateNextNumber(this.organization, 'GRN', this.receivedAt);
   }
   this.totalAmount = this.items.reduce((sum, i) => sum + i.receivedQty * i.unitPrice, 0);
   next();

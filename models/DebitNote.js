@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const debitNoteItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -53,8 +54,7 @@ debitNoteSchema.index({ organization: 1, noteNumber: 1 }, { unique: true, sparse
 
 debitNoteSchema.pre('save', async function (next) {
   if (!this.noteNumber) {
-    const count = await mongoose.model('DebitNote').countDocuments({ organization: this.organization });
-    this.noteNumber = `DN-${String(count + 1).padStart(5, '0')}`;
+    this.noteNumber = await generateNextNumber(this.organization, 'DebitNote', this.noteDate);
   }
   let subtotal = 0;
   let totalTax = 0;

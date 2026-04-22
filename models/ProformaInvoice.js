@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const piItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -49,8 +50,7 @@ proformaInvoiceSchema.index({ organization: 1, piNumber: 1 }, { unique: true, sp
 
 proformaInvoiceSchema.pre('save', async function (next) {
   if (!this.piNumber) {
-    const count = await mongoose.model('ProformaInvoice').countDocuments({ organization: this.organization });
-    this.piNumber = `PI-${String(count + 1).padStart(5, '0')}`;
+    this.piNumber = await generateNextNumber(this.organization, 'ProformaInvoice', this.piDate);
   }
   let subtotal = 0;
   let totalTax = 0;

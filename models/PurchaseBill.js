@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const pbItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -54,8 +55,7 @@ purchaseBillSchema.index({ organization: 1, billNumber: 1 }, { unique: true, spa
 
 purchaseBillSchema.pre('save', async function (next) {
   if (!this.billNumber) {
-    const count = await mongoose.model('PurchaseBill').countDocuments({ organization: this.organization });
-    this.billNumber = `PB-${String(count + 1).padStart(5, '0')}`;
+    this.billNumber = await generateNextNumber(this.organization, 'PurchaseBill', this.billDate);
   }
   let subtotal = 0;
   let totalTax = 0;

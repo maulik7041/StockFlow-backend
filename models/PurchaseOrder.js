@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const poItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -49,8 +50,7 @@ poSchema.index({ organization: 1, poNumber: 1 }, { unique: true, sparse: true })
 
 poSchema.pre('save', async function (next) {
   if (!this.poNumber) {
-    const count = await mongoose.model('PurchaseOrder').countDocuments({ organization: this.organization });
-    this.poNumber = `PO-${String(count + 1).padStart(5, '0')}`;
+    this.poNumber = await generateNextNumber(this.organization, 'PurchaseOrder', this.createdAt);
   }
   let subtotal = 0;
   let totalTax = 0;

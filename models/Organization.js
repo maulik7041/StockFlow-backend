@@ -13,6 +13,7 @@ const organizationSchema = new mongoose.Schema(
       logo: { type: String },
       termsAndConditions: { type: String, default: '' },
       poTermsAndConditions: { type: String, default: '' },
+      docNumberPrefix: { type: String, default: 'ORG', trim: true },
     },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
