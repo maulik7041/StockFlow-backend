@@ -13,7 +13,7 @@ exports.getGRNs = async (req, res, next) => {
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.po) filter.purchaseOrder = req.query.po;
     const [grns, total] = await Promise.all([
-      GRN.find(filter).populate('purchaseOrder', 'poNumber').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
+      GRN.find(filter).populate('purchaseOrder', 'poNumber vendor').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       GRN.countDocuments(filter),
     ]);
     return sendPaginated(res, grns, total, page, limit);
@@ -31,7 +31,7 @@ exports.getGRN = async (req, res, next) => {
 
 exports.createGRN = async (req, res, next) => {
   try {
-    const { purchaseOrderId, items, notes, receivedAt } = req.body;
+    const { purchaseOrderId, items, notes, receivedAt, vendorBillNo, vendorBillDate } = req.body;
     const orgId = req.organizationId;
 
     const po = await PurchaseOrder.findOne({ _id: purchaseOrderId, organization: orgId });
@@ -47,7 +47,7 @@ exports.createGRN = async (req, res, next) => {
       }
     }
 
-    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
+    const grn = await GRN.create({ purchaseOrder: purchaseOrderId, organization: orgId, items, notes, receivedAt, vendorBillNo, vendorBillDate, createdBy: req.user._id, createdAt: Date.now(), updatedAt: Date.now() });
 
     for (const grnItem of items) {
       let inv = await Inventory.findOne({ item: grnItem.item, organization: orgId });

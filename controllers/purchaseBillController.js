@@ -31,12 +31,12 @@ exports.getPurchaseBill = async (req, res, next) => {
 
 exports.createPurchaseBill = async (req, res, next) => {
   try {
-    const { vendor, items, billDate, dueDate, notes, freightCharges, taxType, purchaseOrder, grn } = req.body;
+    const { vendor, items, billDate, dueDate, notes, freightCharges, taxType, purchaseOrder, grn, vendorBillNo } = req.body;
     const orgId = req.organizationId;
 
     const bill = await PurchaseBill.create({
       vendor, items, billDate: billDate || Date.now(), dueDate, notes, freightCharges, taxType,
-      purchaseOrder: purchaseOrder || null, grn: grn || null,
+      purchaseOrder: purchaseOrder || null, grn: grn || null, vendorBillNo: vendorBillNo || '',
       organization: orgId, createdBy: req.user._id, updatedBy: req.user._id,
       createdAt: Date.now(), updatedAt: Date.now(),
     });

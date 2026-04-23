@@ -21,6 +21,8 @@ const grnSchema = new mongoose.Schema(
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
     items: [grnItemSchema],
     receivedAt: { type: Date, default: Date.now },
+    vendorBillNo: { type: String, trim: true },
+    vendorBillDate: { type: Date },
     status: { type: String, enum: ['Active', 'Cancelled'], default: 'Active' },
     notes: { type: String, trim: true },
     totalAmount: { type: Number, default: 0 },

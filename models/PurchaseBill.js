@@ -22,6 +22,7 @@ const purchaseBillSchema = new mongoose.Schema(
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', default: null },
     grn: { type: mongoose.Schema.Types.ObjectId, ref: 'GRN', default: null },
+    vendorBillNo: { type: String, trim: true },
     items: [pbItemSchema],
     billDate: { type: Date, default: Date.now },
     dueDate: { type: Date },
