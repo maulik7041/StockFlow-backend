@@ -18,7 +18,7 @@ exports.getOrg = async (req, res, next) => {
 // @route PUT /api/organization
 exports.updateOrg = async (req, res, next) => {
   try {
-    const allowed = ['name', 'settings'];
+    const allowed = ['name', 'settings', 'gstNumber', 'address'];
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 

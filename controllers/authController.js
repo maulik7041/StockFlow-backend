@@ -12,13 +12,13 @@ const generateToken = (userId, organizationId) =>
 // @route POST /api/auth/register
 exports.register = async (req, res, next) => {
   try {
-    const { orgName, name, email, password } = req.body;
+    const { orgName, name, email, password, gstNumber, address } = req.body;
     if (!orgName) return sendError(res, 'Organization name is required', 400);
 
 
 
     // Create organization
-    const org = await Organization.create({ name: orgName, createdAt: Date.now(), updatedAt: Date.now() });
+    const org = await Organization.create({ name: orgName, gstNumber, address, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Create admin user linked to org
     const user = await User.create({ name, email, password, role: 'admin', organization: org._id, createdAt: Date.now(), updatedAt: Date.now() });
@@ -34,7 +34,7 @@ exports.register = async (req, res, next) => {
       {
         token,
         user: { id: user._id, name: user.name, email: user.email, role: user.role, modules: user.modules || [] },
-        org: { id: org._id, name: org.name, slug: org.slug, plan: org.plan },
+        org: { id: org._id, name: org.name, slug: org.slug, plan: org.plan, gstNumber: org.gstNumber, address: org.address, settings: org.settings },
       },
       'Organization and admin account created',
       201
@@ -51,8 +51,8 @@ exports.login = async (req, res, next) => {
     const { email, password, organizationId } = req.body;
     if (!email || !password) return sendError(res, 'Please provide email and password', 400);
 
-    const users = await User.find({ email }).select('+password').populate('organization', 'name slug plan isActive');
-    if (!users || users.length === 0) return sendError(res, 'Invalid credentials', 401);
+    const users = await User.find({ email }).select('+password').populate('organization', 'name slug plan isActive settings gstNumber address');
+    if (!users || users.length === 0) return sendError(res, 'Invalid email or password', 401);
 
     const validUsers = [];
     for (const u of users) {
@@ -63,7 +63,7 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    if (validUsers.length === 0) return sendError(res, 'Invalid credentials or inactive account', 401);
+    if (validUsers.length === 0) return sendError(res, 'Invalid email, password, or inactive account', 401);
 
     let selectedUser;
 
@@ -96,6 +96,9 @@ exports.login = async (req, res, next) => {
         name: selectedUser.organization.name,
         slug: selectedUser.organization.slug,
         plan: selectedUser.organization.plan,
+        gstNumber: selectedUser.organization.gstNumber,
+        address: selectedUser.organization.address,
+        settings: selectedUser.organization.settings,
       },
     }, 'Login successful');
   } catch (err) {
@@ -106,7 +109,7 @@ exports.login = async (req, res, next) => {
 // @desc  Get current user
 // @route GET /api/auth/me
 exports.getMe = async (req, res) => {
-  const user = await User.findById(req.user._id).populate('organization', 'name slug plan settings');
+  const user = await User.findById(req.user._id).populate('organization', 'name slug plan settings gstNumber address');
   return sendSuccess(res, {
     user: { id: user._id, name: user.name, email: user.email, role: user.role, modules: user.modules || [] },
     org: user.organization,

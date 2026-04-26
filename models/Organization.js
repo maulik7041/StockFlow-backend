@@ -7,6 +7,8 @@ const organizationSchema = new mongoose.Schema(
     slug: { type: String, unique: true, lowercase: true, trim: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     plan: { type: String, enum: ['free', 'pro', 'enterprise'], default: 'free' },
+    gstNumber: { type: String, trim: true },
+    address: { type: String, trim: true },
     settings: {
       currency: { type: String, default: 'INR' },
       timezone: { type: String, default: 'Asia/Kolkata' },
