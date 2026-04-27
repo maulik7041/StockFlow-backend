@@ -43,7 +43,7 @@ exports.createPurchaseBill = async (req, res, next) => {
 
     return sendSuccess(res, bill, 'Purchase Bill created', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to create Purchase Bill. Please try again.', 400);
   }
 };
 
@@ -53,8 +53,29 @@ exports.updatePurchaseBill = async (req, res, next) => {
     if (!bill) return sendError(res, 'Purchase Bill not found', 404);
     if (bill.status === 'Cancelled') return sendError(res, 'Cannot update a cancelled Purchase Bill', 400);
 
-    // Don't allow direct paidAmount override — use Payment API
-    const { paidAmount, ...safeBody } = req.body;
+    const hasPayments = (bill.paidAmount || 0) > 0;
+
+    // B2: Block item editing after creation
+    if (req.body.items) {
+      return sendError(res, 'Cannot modify items after bill creation. Cancel and create a new bill.', 400);
+    }
+
+    // B3: Block cancellation if payments exist
+    if (req.body.status === 'Cancelled' && hasPayments) {
+      return sendError(res, 'Cannot cancel a bill with recorded payments. Delete all payments first.', 400);
+    }
+
+    if (hasPayments) {
+      const safeFields = ['status', 'notes', 'dueDate'];
+      const attemptedFields = Object.keys(req.body);
+      const unsafeFields = attemptedFields.filter(f => !safeFields.includes(f));
+      if (unsafeFields.length > 0) {
+        return sendError(res, `Cannot edit ${unsafeFields.join(', ')} after payments have been recorded. Delete payments first.`, 400);
+      }
+    }
+
+    // C3: Strip protected fields
+    const { paidAmount, cnAmount, dnAmount, paymentStatus, totalAmount, billNumber, organization, createdBy, ...safeBody } = req.body;
     Object.assign(bill, safeBody);
     bill.updatedBy = req.user._id;
     bill.updatedAt = Date.now();
@@ -69,6 +90,11 @@ exports.cancelPurchaseBill = async (req, res, next) => {
     const bill = await PurchaseBill.findOne({ _id: req.params.id, organization: req.organizationId });
     if (!bill) return sendError(res, 'Purchase Bill not found', 404);
     if (bill.status === 'Cancelled') return sendError(res, 'Already cancelled', 400);
+
+    // C6/B3: Block cancellation if payments exist
+    if ((bill.paidAmount || 0) > 0) {
+      return sendError(res, 'Cannot cancel a bill with recorded payments. Delete all payments first.', 400);
+    }
 
     bill.status = 'Cancelled';
     bill.updatedBy = req.user._id;

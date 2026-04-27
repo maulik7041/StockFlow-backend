@@ -88,13 +88,15 @@ exports.createCreditNote = async (req, res, next) => {
     const { partyType, party, referenceDocumentType, referenceDocumentId, items, noteDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, referenceNumber } = req.body;
     const orgId = req.organizationId;
 
-    // Validate reference document exists
+    // Validate reference document exists and party matches (B5)
     if (referenceDocumentType === 'SalesInvoice') {
       const doc = await SalesInvoice.findOne({ _id: referenceDocumentId, organization: orgId });
       if (!doc) return sendError(res, 'Referenced Sales Invoice not found', 400);
+      if (doc.customer.toString() !== party) return sendError(res, 'Party does not match the referenced Invoice customer', 400);
     } else if (referenceDocumentType === 'PurchaseBill') {
       const doc = await PurchaseBill.findOne({ _id: referenceDocumentId, organization: orgId });
       if (!doc) return sendError(res, 'Referenced Purchase Bill not found', 400);
+      if (doc.vendor.toString() !== party) return sendError(res, 'Party does not match the referenced Bill vendor', 400);
     }
 
     const note = await CreditNote.create({
@@ -110,7 +112,7 @@ exports.createCreditNote = async (req, res, next) => {
 
     return sendSuccess(res, note, 'Credit note created', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to create credit note. Please try again.', 400);
   }
 };
 
@@ -120,7 +122,9 @@ exports.updateCreditNote = async (req, res, next) => {
     if (!note) return sendError(res, 'Credit note not found', 404);
     if (note.status === 'Cancelled') return sendError(res, 'Cannot update a cancelled credit note', 400);
 
-    Object.assign(note, req.body);
+    // C3: Strip protected fields
+    const { organization, createdBy, totalAmount, noteNumber, status, ...safeBody } = req.body;
+    Object.assign(note, safeBody);
     note.updatedBy = req.user._id;
     note.updatedAt = Date.now();
     await note.save();

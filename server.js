@@ -1,4 +1,21 @@
 require('dotenv').config();
+
+// ── Env Validation ──────────────────────────────────────────────
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+requiredEnvVars.forEach((key) => {
+  if (!process.env[key]) {
+    console.error(`❌ Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+});
+if (process.env.NODE_ENV !== 'production') {
+  console.warn('⚠️  NODE_ENV is not set to "production". Stack traces will be exposed in error responses.');
+}
+if (!process.env.CLIENT_URL) {
+  console.warn('⚠️  CLIENT_URL is not set. CORS will default to http://localhost:5173 (development only).');
+}
+// ────────────────────────────────────────────────────────────────
+
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');

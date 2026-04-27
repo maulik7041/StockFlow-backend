@@ -3,7 +3,8 @@ const SalesInvoice = require('../models/SalesInvoice');
 const PurchaseBill = require('../models/PurchaseBill');
 const Customer = require('../models/Customer');
 const Vendor = require('../models/Vendor');
-const { sendSuccess, sendError } = require('../utils/response');
+const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { getPagination, getSort } = require('../utils/pagination');
 const { getAdvancedFilter } = require('../utils/filter');
 const mongoose = require('mongoose');
 
@@ -34,6 +35,13 @@ exports.recordPayment = async (req, res, next) => {
     if (!document) return sendError(res, 'Document not found', 404);
     if (document.status === 'Cancelled') return sendError(res, 'Cannot record payment for a cancelled document', 400);
 
+    // H7: Validate payment does not exceed remaining balance
+    const netTotal = document.totalAmount + (document.dnAmount || 0) - (document.cnAmount || 0);
+    const remainingBalance = netTotal - (document.paidAmount || 0);
+    if (+amount > remainingBalance + 0.01) {
+      return sendError(res, `Payment amount ₹${amount} exceeds remaining balance ₹${remainingBalance.toFixed(2)}`, 400);
+    }
+
     // Create payment record with single allocation
     const payment = await Payment.create({
       organization: orgId,
@@ -59,7 +67,7 @@ exports.recordPayment = async (req, res, next) => {
 
     return sendSuccess(res, { payment, paidAmount: document.paidAmount, paymentStatus: document.paymentStatus }, 'Payment recorded', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to record payment. Please try again.', 400);
   }
 };
 
@@ -144,7 +152,7 @@ exports.recordBulkPayment = async (req, res, next) => {
 
     return sendSuccess(res, { payment }, 'Bulk payment recorded', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to record bulk payment. Please try again.', 400);
   }
 };
 
@@ -165,37 +173,53 @@ exports.getUnpaidDocuments = async (req, res, next) => {
         organization: orgId,
         customer: partyId,
         status: { $ne: 'Cancelled' },
-        $expr: { $gt: ['$totalAmount', { $ifNull: ['$paidAmount', 0] }] }
-      }).select('invoiceNumber invoiceDate totalAmount paidAmount paymentStatus').sort({ invoiceDate: 1 });
+        $expr: {
+          $gt: [
+            { $subtract: [{ $add: ['$totalAmount', { $ifNull: ['$dnAmount', 0] }] }, { $ifNull: ['$cnAmount', 0] }] },
+            { $ifNull: ['$paidAmount', 0] }
+          ]
+        }
+      }).select('invoiceNumber invoiceDate totalAmount paidAmount paymentStatus dnAmount cnAmount').sort({ invoiceDate: 1 });
 
-      documents = invoices.map(inv => ({
-        _id: inv._id,
-        documentType: 'SalesInvoice',
-        documentNumber: inv.invoiceNumber,
-        date: inv.invoiceDate,
-        totalAmount: inv.totalAmount,
-        paidAmount: inv.paidAmount || 0,
-        balance: inv.totalAmount - (inv.paidAmount || 0),
-        paymentStatus: inv.paymentStatus,
-      }));
+      documents = invoices.map(inv => {
+        const netPayable = inv.totalAmount + (inv.dnAmount || 0) - (inv.cnAmount || 0);
+        return {
+          _id: inv._id,
+          documentType: 'SalesInvoice',
+          documentNumber: inv.invoiceNumber,
+          date: inv.invoiceDate,
+          totalAmount: netPayable,
+          paidAmount: inv.paidAmount || 0,
+          balance: netPayable - (inv.paidAmount || 0),
+          paymentStatus: inv.paymentStatus,
+        };
+      });
     } else if (partyType === 'Vendor') {
       const bills = await PurchaseBill.find({
         organization: orgId,
         vendor: partyId,
         status: { $ne: 'Cancelled' },
-        $expr: { $gt: ['$totalAmount', { $ifNull: ['$paidAmount', 0] }] }
-      }).select('billNumber billDate totalAmount paidAmount paymentStatus').sort({ billDate: 1 });
+        $expr: {
+          $gt: [
+            { $subtract: [{ $add: ['$totalAmount', { $ifNull: ['$dnAmount', 0] }] }, { $ifNull: ['$cnAmount', 0] }] },
+            { $ifNull: ['$paidAmount', 0] }
+          ]
+        }
+      }).select('billNumber billDate totalAmount paidAmount paymentStatus dnAmount cnAmount').sort({ billDate: 1 });
 
-      documents = bills.map(bill => ({
-        _id: bill._id,
-        documentType: 'PurchaseBill',
-        documentNumber: bill.billNumber,
-        date: bill.billDate,
-        totalAmount: bill.totalAmount,
-        paidAmount: bill.paidAmount || 0,
-        balance: bill.totalAmount - (bill.paidAmount || 0),
-        paymentStatus: bill.paymentStatus,
-      }));
+      documents = bills.map(bill => {
+        const netPayable = bill.totalAmount + (bill.dnAmount || 0) - (bill.cnAmount || 0);
+        return {
+          _id: bill._id,
+          documentType: 'PurchaseBill',
+          documentNumber: bill.billNumber,
+          date: bill.billDate,
+          totalAmount: netPayable,
+          paidAmount: bill.paidAmount || 0,
+          balance: netPayable - (bill.paidAmount || 0),
+          paymentStatus: bill.paymentStatus,
+        };
+      });
     } else {
       return sendError(res, 'Invalid partyType', 400);
     }
@@ -282,9 +306,16 @@ exports.getPayments = async (req, res, next) => {
       delete query.partyName;
     }
 
-    const payments = await Payment.find(query)
-      .populate('createdBy', 'name')
-      .sort({ paymentDate: -1 });
+    // M6: Add pagination
+    const { page, limit, skip } = getPagination(req.query);
+    const [payments, total] = await Promise.all([
+      Payment.find(query)
+        .populate('createdBy', 'name')
+        .sort({ paymentDate: -1 })
+        .skip(skip)
+        .limit(limit),
+      Payment.countDocuments(query),
+    ]);
 
     // Collect all referenced document IDs from both legacy and allocations
     const allDocRefs = [];
@@ -342,6 +373,49 @@ exports.getPayments = async (req, res, next) => {
       return obj;
     });
 
-    return sendSuccess(res, paymentData);
+    return sendPaginated(res, paymentData, total, page, limit, 'Payments fetched');
+  } catch (err) { next(err); }
+};
+
+// B1: Delete a payment and reverse the paidAmount on linked documents
+exports.deletePayment = async (req, res, next) => {
+  try {
+    const payment = await Payment.findOne({ _id: req.params.id, organization: req.organizationId });
+    if (!payment) return sendError(res, 'Payment not found', 404);
+
+    // Reverse allocations on linked documents
+    if (payment.allocations && payment.allocations.length > 0) {
+      for (const alloc of payment.allocations) {
+        let doc;
+        if (alloc.documentType === 'SalesInvoice') {
+          doc = await SalesInvoice.findById(alloc.documentId);
+        } else if (alloc.documentType === 'PurchaseBill') {
+          doc = await PurchaseBill.findById(alloc.documentId);
+        }
+        if (doc) {
+          doc.paidAmount = Math.max(0, (doc.paidAmount || 0) - alloc.amount);
+          doc.updatedAt = Date.now();
+          await doc.save(); // Triggers paymentStatus recalc
+        }
+      }
+    } else if (payment.documentId) {
+      // Legacy single-document payment
+      let doc;
+      if (payment.documentType === 'SalesInvoice') {
+        doc = await SalesInvoice.findById(payment.documentId);
+      } else if (payment.documentType === 'PurchaseBill') {
+        doc = await PurchaseBill.findById(payment.documentId);
+      }
+      if (doc) {
+        doc.paidAmount = Math.max(0, (doc.paidAmount || 0) - payment.amount);
+        doc.updatedAt = Date.now();
+        await doc.save();
+      }
+    }
+
+    // Delete the payment record
+    await Payment.findByIdAndDelete(payment._id);
+
+    return sendSuccess(res, null, 'Payment deleted and reversed successfully');
   } catch (err) { next(err); }
 };

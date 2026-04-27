@@ -3,6 +3,7 @@ const GRN = require('../models/GRN');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
+const Item = require('../models/Item');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
 const { getAdvancedFilter } = require('../utils/filter');
@@ -40,10 +41,14 @@ exports.createGRN = async (req, res, next) => {
 
     for (const grnItem of items) {
       const poItem = po.items.find((i) => i.item.toString() === grnItem.item);
-      if (!poItem) throw new Error(`Item ${grnItem.item} not found in PO`);
+      if (!poItem) {
+        const itemDoc = await Item.findById(grnItem.item).select('name');
+        throw new Error(`Item "${itemDoc?.name || 'Unknown'}" not found in this Purchase Order`);
+      }
       const alreadyReceived = poItem.receivedQty || 0;
       if (alreadyReceived + grnItem.receivedQty > poItem.quantity) {
-        throw new Error(`Received qty exceeds ordered qty for item ${grnItem.item}`);
+        const itemDoc = await Item.findById(grnItem.item).select('name');
+        throw new Error(`Received quantity exceeds ordered quantity for "${itemDoc?.name || 'Unknown Item'}"`);
       }
     }
 
@@ -85,7 +90,7 @@ exports.createGRN = async (req, res, next) => {
 
     return sendSuccess(res, grn, 'GRN created and stock updated', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to create GRN. Please try again.', 400);
   }
 };
 
@@ -94,6 +99,15 @@ exports.cancelGRN = async (req, res, next) => {
     const grn = await GRN.findOne({ _id: req.params.id, organization: req.organizationId }).populate('purchaseOrder');
     if (!grn) return sendError(res, 'GRN not found', 404);
     if (grn.status === 'Cancelled') return sendError(res, 'GRN is already cancelled', 400);
+
+    // M5: Verify sufficient stock before reversing
+    for (const grnItem of grn.items) {
+      const inv = await Inventory.findOne({ item: grnItem.item, organization: req.organizationId });
+      if (!inv || inv.currentStock < grnItem.receivedQty) {
+        const itemDoc = await Item.findById(grnItem.item).select('name');
+        return sendError(res, `Cannot cancel GRN: insufficient stock to reverse "${itemDoc?.name || 'Unknown Item'}". Current stock: ${inv?.currentStock || 0}, needs: ${grnItem.receivedQty}`, 400);
+      }
+    }
 
     for (const item of grn.items) {
       let inv = await Inventory.findOne({ item: item.item, organization: req.organizationId });

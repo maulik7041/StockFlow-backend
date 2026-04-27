@@ -5,6 +5,7 @@ const PurchaseBill = require('../models/PurchaseBill');
 
 /**
  * Recalculates and updates cnAmount and dnAmount on the parent document (SalesInvoice or PurchaseBill).
+ * M7: Uses single findById + set + save pattern to avoid double-write.
  * @param {string} parentType - 'SalesInvoice' or 'PurchaseBill'
  * @param {string} parentId - ID of the parent document
  */
@@ -25,15 +26,17 @@ async function syncNoteAmountsToParent(parentType, parentId) {
   const cnAmount = cnResults.length > 0 ? cnResults[0].total : 0;
   const dnAmount = dnResults.length > 0 ? dnResults[0].total : 0;
 
+  let doc;
   if (parentType === 'SalesInvoice') {
-    await SalesInvoice.findByIdAndUpdate(parentId, { cnAmount, dnAmount }, { runValidators: true });
-    // Trigger pre-save for paymentStatus update
-    const doc = await SalesInvoice.findById(parentId);
-    if (doc) await doc.save();
+    doc = await SalesInvoice.findById(parentId);
   } else if (parentType === 'PurchaseBill') {
-    await PurchaseBill.findByIdAndUpdate(parentId, { cnAmount, dnAmount }, { runValidators: true });
-    const doc = await PurchaseBill.findById(parentId);
-    if (doc) await doc.save();
+    doc = await PurchaseBill.findById(parentId);
+  }
+
+  if (doc) {
+    doc.cnAmount = cnAmount;
+    doc.dnAmount = dnAmount;
+    await doc.save(); // Triggers pre-save hook for paymentStatus recalc
   }
 }
 

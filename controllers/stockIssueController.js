@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const StockIssue = require('../models/StockIssue');
 const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
@@ -44,14 +45,30 @@ exports.createIssue = async (req, res, next) => {
     const { items, department, notes } = req.body;
     if (!items || !items.length) return sendError(res, 'Items required', 400);
 
-    // 1. Verify enough stock and items exist
-    const inventoryUpdates = [];
-    for (const poItem of items) {
-      const inv = await Inventory.findOne({ item: poItem.item, organization: req.organizationId });
-      if (!inv || inv.currentStock < poItem.quantity) {
-        return sendError(res, `Insufficient stock for item ID: ${poItem.item}`, 400);
+    // 1. Atomically verify and deduct stock (C5) using $gte guard
+    const deductedItems = [];
+    try {
+      for (const poItem of items) {
+        const inv = await Inventory.findOneAndUpdate(
+          { item: poItem.item, organization: req.organizationId, currentStock: { $gte: poItem.quantity } },
+          { $inc: { currentStock: -poItem.quantity }, $set: { updatedAt: Date.now() } },
+          { new: true }
+        );
+        if (!inv) {
+          const itemDoc = await Item.findById(poItem.item).select('name');
+          throw new Error(`Insufficient stock for "${itemDoc?.name || 'Unknown Item'}". Please check available quantity.`);
+        }
+        deductedItems.push({ item: poItem.item, quantity: poItem.quantity, balanceAfter: inv.currentStock });
       }
-      inventoryUpdates.push({ inv, qty: poItem.quantity });
+    } catch (stockErr) {
+      // Rollback any already-deducted items
+      for (const d of deductedItems) {
+        await Inventory.findOneAndUpdate(
+          { item: d.item, organization: req.organizationId },
+          { $inc: { currentStock: d.quantity } }
+        );
+      }
+      return sendError(res, stockErr.message, 400);
     }
 
     // 2. Create Stock Issue
@@ -66,19 +83,14 @@ exports.createIssue = async (req, res, next) => {
       updatedAt: Date.now()
     });
 
-    // 3. Deduct stock and record transactions
-    for (const update of inventoryUpdates) {
-      const { inv, qty } = update;
-      inv.currentStock -= qty;
-      inv.updatedAt = Date.now();
-      await inv.save();
-
+    // 3. Record stock transactions
+    for (const d of deductedItems) {
       await StockTransaction.create({
         organization: req.organizationId,
-        item: inv.item,
+        item: d.item,
         type: 'OUT',
-        quantity: qty,
-        balanceAfter: inv.currentStock,
+        quantity: d.quantity,
+        balanceAfter: d.balanceAfter,
         refModel: 'StockIssue',
         refId: issue._id,
         note: `Stock Issue to ${department || 'General'}`,
@@ -89,7 +101,9 @@ exports.createIssue = async (req, res, next) => {
     }
 
     return sendSuccess(res, issue, 'Stock issued successfully', 201);
-  } catch (err) { next(err); }
+  } catch (err) {
+    return sendError(res, 'Failed to create stock issue. Please try again.', 400);
+  }
 };
 
 exports.cancelStockIssue = async (req, res, next) => {

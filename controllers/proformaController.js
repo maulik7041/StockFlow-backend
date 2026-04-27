@@ -3,6 +3,7 @@ const ProformaInvoice = require('../models/ProformaInvoice');
 const SalesInvoice = require('../models/SalesInvoice');
 const Inventory = require('../models/Inventory');
 const StockTransaction = require('../models/StockTransaction');
+const Item = require('../models/Item');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, getSort } = require('../utils/pagination');
 const { getAdvancedFilter } = require('../utils/filter');
@@ -50,7 +51,7 @@ exports.createProformaInvoice = async (req, res, next) => {
 
     return sendSuccess(res, pi, 'Proforma Invoice created', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to update Proforma Invoice. Please try again.', 400);
   }
 };
 
@@ -62,7 +63,9 @@ exports.updateProformaInvoice = async (req, res, next) => {
     if (pi.status === 'Converted') return sendError(res, 'Cannot edit a converted Proforma Invoice', 400);
     if (pi.status === 'Cancelled') return sendError(res, 'Cannot edit a cancelled Proforma Invoice', 400);
 
-    Object.assign(pi, req.body);
+    // C3: Strip protected fields
+    const { organization, createdBy, totalAmount, piNumber, convertedSalesInvoiceId, ...safeBody } = req.body;
+    Object.assign(pi, safeBody);
     pi.updatedBy = req.user._id;
     pi.updatedAt = Date.now();
     await pi.save();
@@ -79,16 +82,33 @@ exports.convertToSalesInvoice = async (req, res, next) => {
     if (pi.convertedSalesInvoiceId) return sendError(res, 'This Proforma Invoice has already been converted', 400);
     if (pi.status === 'Cancelled') return sendError(res, 'Cannot convert a cancelled Proforma Invoice', 400);
 
-    // The request body contains the (potentially edited) sales invoice data
     const saleData = req.body;
     const orgId = req.organizationId;
 
-    // Check stock availability
-    for (const saleItem of saleData.items) {
-      const inv = await Inventory.findOne({ item: saleItem.item, organization: orgId });
-      if (!inv || inv.currentStock < saleItem.quantity) {
-        throw new Error(`Insufficient stock for item ${saleItem.item}`);
+    // C5: Atomically check and deduct stock using $gte guard
+    const deductedItems = [];
+    try {
+      for (const saleItem of saleData.items) {
+        const inv = await Inventory.findOneAndUpdate(
+          { item: saleItem.item, organization: orgId, currentStock: { $gte: saleItem.quantity } },
+          { $inc: { currentStock: -saleItem.quantity }, $set: { updatedAt: Date.now() } },
+          { new: true }
+        );
+        if (!inv) {
+          const itemDoc = await Item.findById(saleItem.item).select('name');
+          throw new Error(`Insufficient stock for "${itemDoc?.name || 'Unknown Item'}". Please check available quantity.`);
+        }
+        deductedItems.push({ item: saleItem.item, quantity: saleItem.quantity, balanceAfter: inv.currentStock });
       }
+    } catch (stockErr) {
+      // Rollback any already-deducted items
+      for (const d of deductedItems) {
+        await Inventory.findOneAndUpdate(
+          { item: d.item, organization: orgId },
+          { $inc: { currentStock: d.quantity } }
+        );
+      }
+      return sendError(res, stockErr.message, 400);
     }
 
     // Create sales invoice with source document reference
@@ -103,19 +123,14 @@ exports.convertToSalesInvoice = async (req, res, next) => {
       updatedAt: Date.now()
     });
 
-    // Deduct stock
-    for (const saleItem of saleData.items) {
-      const inv = await Inventory.findOne({ item: saleItem.item, organization: orgId });
-      inv.currentStock -= saleItem.quantity;
-      inv.updatedAt = Date.now();
-      await inv.save();
-
+    // Record stock transactions
+    for (const d of deductedItems) {
       await StockTransaction.create({
-        item: saleItem.item,
+        item: d.item,
         organization: orgId,
         type: 'OUT',
-        quantity: saleItem.quantity,
-        balanceAfter: inv.currentStock,
+        quantity: d.quantity,
+        balanceAfter: d.balanceAfter,
         refModel: 'SalesInvoice',
         refId: invoice._id,
         note: `Invoice ${invoice.invoiceNumber} (from ${pi.piNumber})`,
@@ -134,6 +149,7 @@ exports.convertToSalesInvoice = async (req, res, next) => {
 
     return sendSuccess(res, invoice, 'Proforma Invoice converted to Sales Invoice', 201);
   } catch (err) {
-    return sendError(res, err.message, 400);
+    return sendError(res, 'Failed to convert Proforma Invoice. Please try again.', 400);
   }
 };
+
