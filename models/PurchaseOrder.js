@@ -23,6 +23,7 @@ const poSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     poNumber: { type: String },
+    serialNumber: { type: String },
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
     items: [poItemSchema],
     status: {
@@ -50,7 +51,9 @@ poSchema.index({ organization: 1, poNumber: 1 }, { unique: true, sparse: true })
 
 poSchema.pre('save', async function (next) {
   if (!this.poNumber) {
-    this.poNumber = await generateNextNumber(this.organization, 'PurchaseOrder', this.createdAt);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'PurchaseOrder', this.createdAt);
+    this.poNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   let subtotal = 0;
   let totalTax = 0;

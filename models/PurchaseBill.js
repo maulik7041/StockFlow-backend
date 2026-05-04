@@ -19,6 +19,7 @@ const purchaseBillSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     billNumber: { type: String },
+    serialNumber: { type: String },
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', default: null },
     grn: { type: mongoose.Schema.Types.ObjectId, ref: 'GRN', default: null },
@@ -56,7 +57,9 @@ purchaseBillSchema.index({ organization: 1, billNumber: 1 }, { unique: true, spa
 
 purchaseBillSchema.pre('save', async function (next) {
   if (!this.billNumber) {
-    this.billNumber = await generateNextNumber(this.organization, 'PurchaseBill', this.billDate);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'PurchaseBill', this.billDate);
+    this.billNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   let subtotal = 0;
   let totalTax = 0;

@@ -6,7 +6,7 @@ const sequenceSchema = new mongoose.Schema({
   docType: { 
     type: String, 
     required: true, 
-    enum: ['SalesInvoice', 'PurchaseOrder', 'GRN', 'PurchaseBill', 'CreditNote', 'DebitNote', 'ProformaInvoice'] 
+    enum: ['SalesInvoice', 'PurchaseOrder', 'GRN', 'PurchaseBill', 'CreditNote', 'DebitNote', 'ProformaInvoice', 'StockIssue'] 
   },
   sequence: { type: Number, default: 0 },
 });

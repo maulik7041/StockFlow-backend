@@ -19,6 +19,7 @@ const proformaInvoiceSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     piNumber: { type: String },
+    serialNumber: { type: String },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     items: [piItemSchema],
     sameAsBilling: { type: Boolean, default: true },
@@ -50,7 +51,9 @@ proformaInvoiceSchema.index({ organization: 1, piNumber: 1 }, { unique: true, sp
 
 proformaInvoiceSchema.pre('save', async function (next) {
   if (!this.piNumber) {
-    this.piNumber = await generateNextNumber(this.organization, 'ProformaInvoice', this.piDate);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'ProformaInvoice', this.piDate);
+    this.piNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   let subtotal = 0;
   let totalTax = 0;

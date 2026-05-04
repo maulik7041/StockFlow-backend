@@ -19,6 +19,7 @@ const debitNoteSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     noteNumber: { type: String },
+    serialNumber: { type: String },
     // Generic party (Customer or Vendor)
     partyType: { type: String, enum: ['Customer', 'Vendor'], required: true },
     party: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -54,7 +55,9 @@ debitNoteSchema.index({ organization: 1, noteNumber: 1 }, { unique: true, sparse
 
 debitNoteSchema.pre('save', async function (next) {
   if (!this.noteNumber) {
-    this.noteNumber = await generateNextNumber(this.organization, 'DebitNote', this.noteDate);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'DebitNote', this.noteDate);
+    this.noteNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   let subtotal = 0;
   let totalTax = 0;

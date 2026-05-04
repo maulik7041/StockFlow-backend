@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const issueItemSchema = new mongoose.Schema({
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
@@ -9,6 +10,7 @@ const stockIssueSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     issueNumber: { type: String },
+    serialNumber: { type: String },
     items: [issueItemSchema],
     status: {
       type: String,
@@ -30,8 +32,9 @@ stockIssueSchema.index({ organization: 1, issueNumber: 1 }, { unique: true, spar
 
 stockIssueSchema.pre('save', async function (next) {
   if (!this.issueNumber) {
-    const count = await mongoose.model('StockIssue').countDocuments({ organization: this.organization });
-    this.issueNumber = `SI-${String(count + 1).padStart(5, '0')}`;
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'StockIssue', this.issueDate);
+    this.issueNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   next();
 });

@@ -19,7 +19,16 @@ const organizationSchema = new mongoose.Schema(
       cnTermsAndConditions: { type: String, default: '' },
       dnTermsAndConditions: { type: String, default: '' },
       pbTermsAndConditions: { type: String, default: '' },
-      docNumberPrefix: { type: String, default: 'ORG', trim: true },
+      docPrefixes: {
+        SalesInvoice: { type: String, default: 'INV' },
+        PurchaseOrder: { type: String, default: 'PO' },
+        GRN: { type: String, default: 'GRN' },
+        PurchaseBill: { type: String, default: 'PB' },
+        CreditNote: { type: String, default: 'CN' },
+        DebitNote: { type: String, default: 'DN' },
+        ProformaInvoice: { type: String, default: 'PI' },
+        StockIssue: { type: String, default: 'SI' }
+      }
     },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
