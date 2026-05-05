@@ -17,7 +17,10 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.1",
     "morgan": "^1.10.0",
-    "slugify": "^1.6.8"
+    "multer": "^2.1.1",
+    "slugify": "^1.6.8",
+    "uuid": "^14.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
