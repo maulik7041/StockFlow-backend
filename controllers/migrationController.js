@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const MigrationLog = require('../models/MigrationLog');
 const Item = require('../models/Item');
 const Customer = require('../models/Customer');
@@ -418,7 +418,7 @@ exports.execute = async (req, res, next) => {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
     if (!entity) return res.status(400).json({ success: false, message: 'Entity type is required' });
 
-    const batchId = uuidv4();
+    const batchId = crypto.randomUUID();
     const { rows } = parseUpload(req.file.buffer, entity);
 
     const log = await MigrationLog.create({
