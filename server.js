@@ -46,6 +46,9 @@ connectDB();
 
 const app = express();
 
+// Trust proxy for rate limiting (essential for Nginx/EC2)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json({ limit: '5mb' }));

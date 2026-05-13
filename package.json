@@ -18,6 +18,7 @@
     "mongoose": "^8.4.1",
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
+    "nodemailer": "^8.0.7",
     "slugify": "^1.6.8",
     "xlsx": "^0.18.5"
   },
