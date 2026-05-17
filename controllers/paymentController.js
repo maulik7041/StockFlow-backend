@@ -36,7 +36,9 @@ exports.recordPayment = async (req, res, next) => {
     if (document.status === 'Cancelled') return sendError(res, 'Cannot record payment for a cancelled document', 400);
 
     // H7: Validate payment does not exceed remaining balance
-    const netTotal = document.totalAmount + (document.dnAmount || 0) - (document.cnAmount || 0);
+    const netTotal = documentType === 'SalesInvoice' 
+      ? document.totalAmount + (document.dnAmount || 0) - (document.cnAmount || 0)
+      : document.totalAmount + (document.cnAmount || 0) - (document.dnAmount || 0);
     const remainingBalance = netTotal - (document.paidAmount || 0);
     if (+amount > remainingBalance + 0.01) {
       return sendError(res, `Payment amount ₹${amount} exceeds remaining balance ₹${remainingBalance.toFixed(2)}`, 400);
@@ -113,7 +115,10 @@ exports.recordBulkPayment = async (req, res, next) => {
       if (!doc) return sendError(res, `Document ${alloc.documentId} not found`, 404);
       if (doc.status === 'Cancelled') return sendError(res, `Cannot allocate payment to cancelled document`, 400);
 
-      const balance = doc.totalAmount - (doc.paidAmount || 0);
+      const netTotal = alloc.documentType === 'SalesInvoice'
+        ? doc.totalAmount + (doc.dnAmount || 0) - (doc.cnAmount || 0)
+        : doc.totalAmount + (doc.cnAmount || 0) - (doc.dnAmount || 0);
+      const balance = netTotal - (doc.paidAmount || 0);
       if (+alloc.amount > balance + 0.01) {
         return sendError(res, `Allocation amount ₹${alloc.amount} exceeds balance ₹${balance.toFixed(2)}`, 400);
       }
@@ -201,14 +206,14 @@ exports.getUnpaidDocuments = async (req, res, next) => {
         status: { $ne: 'Cancelled' },
         $expr: {
           $gt: [
-            { $subtract: [{ $add: ['$totalAmount', { $ifNull: ['$dnAmount', 0] }] }, { $ifNull: ['$cnAmount', 0] }] },
+            { $subtract: [{ $add: ['$totalAmount', { $ifNull: ['$cnAmount', 0] }] }, { $ifNull: ['$dnAmount', 0] }] },
             { $ifNull: ['$paidAmount', 0] }
           ]
         }
       }).select('billNumber billDate totalAmount paidAmount paymentStatus dnAmount cnAmount').sort({ billDate: 1 });
 
       documents = bills.map(bill => {
-        const netPayable = bill.totalAmount + (bill.dnAmount || 0) - (bill.cnAmount || 0);
+        const netPayable = bill.totalAmount + (bill.cnAmount || 0) - (bill.dnAmount || 0);
         return {
           _id: bill._id,
           documentType: 'PurchaseBill',

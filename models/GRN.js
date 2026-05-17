@@ -18,6 +18,7 @@ const grnSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     grnNumber: { type: String },
+    serialNumber: { type: String },
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
     items: [grnItemSchema],
     receivedAt: { type: Date, default: Date.now },
@@ -37,7 +38,9 @@ grnSchema.index({ organization: 1, grnNumber: 1 }, { unique: true, sparse: true 
 
 grnSchema.pre('save', async function (next) {
   if (!this.grnNumber) {
-    this.grnNumber = await generateNextNumber(this.organization, 'GRN', this.receivedAt);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'GRN', this.receivedAt);
+    this.grnNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   this.totalAmount = this.items.reduce((sum, i) => sum + i.receivedQty * i.unitPrice, 0);
   next();

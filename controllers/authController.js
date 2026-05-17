@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Organization = require('../models/Organization');
 const { sendSuccess, sendError } = require('../utils/response');
+const crypto = require('crypto');
+const sendEmail = require('../utils/sendEmail');
 
 const generateToken = (userId, organizationId) =>
   jwt.sign({ id: userId, organizationId }, process.env.JWT_SECRET, {
@@ -15,13 +17,19 @@ exports.register = async (req, res, next) => {
     const { orgName, name, email, password, gstNumber, address } = req.body;
     if (!orgName) return sendError(res, 'Organization name is required', 400);
 
-
-
     // Create organization
     const org = await Organization.create({ name: orgName, gstNumber, address, createdAt: Date.now(), updatedAt: Date.now() });
 
     // Create admin user linked to org
-    const user = await User.create({ name, email, password, role: 'admin', organization: org._id, createdAt: Date.now(), updatedAt: Date.now() });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: 'admin',
+      organization: org._id,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
 
     // Set org owner
     org.owner = user._id;
@@ -122,6 +130,97 @@ exports.getUsers = async (req, res, next) => {
   try {
     const users = await User.find({ organization: req.organizationId }).select('-password').sort({ createdAt: -1 });
     return sendSuccess(res, users, 'Users fetched');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc  Forgot password
+// @route POST /api/auth/forgotpassword
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const users = await User.find({ email });
+
+    if (!users || users.length === 0) {
+      return sendError(res, 'There is no user with that email', 404);
+    }
+
+    // Generate reset token using the first user found (email is shared)
+    const resetToken = users[0].getResetPasswordToken();
+
+    // Save the token and expiry to ALL users with this email
+    await Promise.all(
+      users.map((user) => {
+        user.resetPasswordToken = users[0].resetPasswordToken;
+        user.resetPasswordExpire = users[0].resetPasswordExpire;
+        return user.save({ validateBeforeSave: false });
+      })
+    );
+
+    // Create reset URL
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+
+    const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click the link below or copy it into your browser to complete the process:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
+
+    try {
+      await sendEmail({
+        email: users[0].email,
+        subject: 'Password Reset Request',
+        message,
+      });
+
+      return sendSuccess(res, null, 'Email sent');
+    } catch (err) {
+      console.error(err);
+      // If email fails, clear tokens
+      await Promise.all(
+        users.map((user) => {
+          user.resetPasswordToken = undefined;
+          user.resetPasswordExpire = undefined;
+          return user.save({ validateBeforeSave: false });
+        })
+      );
+
+      return sendError(res, 'Email could not be sent', 500);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc  Reset password
+// @route PUT /api/auth/resetpassword/:resettoken
+exports.resetPassword = async (req, res, next) => {
+  try {
+    // Get hashed token
+    const resetPasswordToken = crypto.createHash('sha256').update(req.params.resettoken).digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return sendError(res, 'Invalid token or token expired', 400);
+    }
+
+    // Set new password
+    const { password } = req.body;
+
+    // Find all users with this email to update password globally
+    const users = await User.find({ email: user.email });
+
+    await Promise.all(
+      users.map((u) => {
+        u.password = password;
+        u.resetPasswordToken = undefined;
+        u.resetPasswordExpire = undefined;
+        return u.save();
+      })
+    );
+
+    return sendSuccess(res, null, 'Password reset successful');
   } catch (err) {
     next(err);
   }

@@ -39,11 +39,15 @@ const paymentRoutes = require('./routes/payments');
 const creditNoteRoutes = require('./routes/creditNotes');
 const debitNoteRoutes = require('./routes/debitNotes');
 const purchaseBillRoutes = require('./routes/purchaseBills');
+const migrationRoutes = require('./routes/migration');
 
 // Connect to DB
 connectDB();
 
 const app = express();
+
+// Trust proxy for rate limiting (essential for Nginx/EC2)
+app.set('trust proxy', 1);
 
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
@@ -71,6 +75,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/credit-notes', creditNoteRoutes);
 app.use('/api/debit-notes', debitNoteRoutes);
 app.use('/api/purchase-bills', purchaseBillRoutes);
+app.use('/api/migration', migrationRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));

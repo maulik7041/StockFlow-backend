@@ -34,15 +34,10 @@ const docTypePrefixMap = {
  */
 const generateNextNumber = async (organizationId, docType, date = new Date(), maxRetries = 3) => {
   const financialYear = getFinancialYear(date);
-  const prefix2 = docTypePrefixMap[docType];
-
-  if (!prefix2) {
-    throw new Error(`Invalid document type: ${docType}`);
-  }
-
-  // Find organization to get prefix1
+  
+  // Find organization to get prefixes
   const org = await Organization.findById(organizationId);
-  const prefix1 = org?.settings?.docNumberPrefix || 'ORG';
+  const prefix = org?.settings?.docPrefixes?.[docType] || docTypePrefixMap[docType] || 'DOC';
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Increment sequence atomically
@@ -53,11 +48,9 @@ const generateNextNumber = async (organizationId, docType, date = new Date(), ma
     );
 
     const paddedNumber = String(sequenceObj.sequence).padStart(3, '0');
-    const docNumber = `${prefix1}/${prefix2}/${paddedNumber}`;
+    const docNumber = `${prefix}/${paddedNumber}`;
 
-    // On first attempt, just return (the unique index on the parent doc will catch duplicates)
-    // On retries, we've already had a collision so we try the next sequence number
-    return docNumber;
+    return { docNumber, serialNumber: paddedNumber };
   }
 
   throw new Error(`Failed to generate unique document number after ${maxRetries} attempts`);

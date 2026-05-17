@@ -19,6 +19,7 @@ const salesInvoiceSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     invoiceNumber: { type: String },
+    serialNumber: { type: String },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     items: [saleItemSchema],
     sameAsBilling: { type: Boolean, default: true },
@@ -58,7 +59,9 @@ salesInvoiceSchema.index({ organization: 1, invoiceNumber: 1 }, { unique: true, 
 
 salesInvoiceSchema.pre('save', async function (next) {
   if (!this.invoiceNumber) {
-    this.invoiceNumber = await generateNextNumber(this.organization, 'SalesInvoice', this.invoiceDate);
+    const { docNumber, serialNumber } = await generateNextNumber(this.organization, 'SalesInvoice', this.invoiceDate);
+    this.invoiceNumber = docNumber;
+    this.serialNumber = serialNumber;
   }
   let subtotal = 0;
   let totalTax = 0;
