@@ -9,16 +9,18 @@ exports.getInventory = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
 
-    if (filter['item.name'] || filter['item.category']) {
+    if (filter['item.name'] || filter['item.category'] || req.query.itemType) {
       const Item = require('../models/Item');
       const itemFilter = { organization: req.organizationId };
       if (filter['item.name']) itemFilter.name = filter['item.name'];
       if (filter['item.category']) itemFilter.category = filter['item.category'];
+      if (req.query.itemType) itemFilter.itemType = req.query.itemType;
 
       const items = await Item.find(itemFilter).select('_id');
       filter.item = { $in: items.map(i => i._id) };
       delete filter['item.name'];
       delete filter['item.category'];
+      delete filter.itemType;
     }
 
     let statusArr = [];
@@ -90,15 +92,19 @@ exports.getTransactions = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const sort = getSort(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
-    filter.refModel = { $in: ['StockIssue', 'GRN', 'Adjustment'] };
     if (req.query.item) filter.item = req.query.item;
     if (req.query.type) filter.type = req.query.type;
 
-    if (filter['item.name']) {
+    if (filter['item.name'] || req.query.itemType) {
       const Item = require('../models/Item');
-      const items = await Item.find({ name: filter['item.name'], organization: req.organizationId }).select('_id');
+      const itemFilter = { organization: req.organizationId };
+      if (filter['item.name']) itemFilter.name = filter['item.name'];
+      if (req.query.itemType) itemFilter.itemType = req.query.itemType;
+      
+      const items = await Item.find(itemFilter).select('_id');
       filter.item = { $in: items.map(i => i._id) };
       delete filter['item.name'];
+      delete filter.itemType;
     }
 
     const [transactions, total] = await Promise.all([

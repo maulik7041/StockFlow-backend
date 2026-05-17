@@ -206,7 +206,7 @@ async function executeInventory(rows, orgId, userId) {
     const tx = await StockTransaction.create({
       organization: orgId, item: itemId, type: 'ADJUST',
       quantity: qty, balanceAfter: qty, refModel: 'Adjustment',
-      note: 'Migration: Opening stock', createdBy: userId,
+      note: 'Data Import', createdBy: userId,
     });
     createdIds.push(tx._id);
   }
