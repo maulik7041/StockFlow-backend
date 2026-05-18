@@ -14,7 +14,6 @@ exports.getCreditNotes = async (req, res, next) => {
     const { page, limit, skip } = getPagination(req.query);
     const filter = { organization: req.organizationId, ...getAdvancedFilter(req.query) };
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.partyType) filter.partyType = req.query.partyType;
     if (req.query.search) filter.noteNumber = { $regex: req.query.search, $options: 'i' };
 
     const [notes, total] = await Promise.all([
@@ -22,27 +21,17 @@ exports.getCreditNotes = async (req, res, next) => {
       CreditNote.countDocuments(filter),
     ]);
 
-    // Hydrate party names
-    const customerIds = notes.filter(n => n.partyType === 'Customer').map(n => n.party);
-    const vendorIds = notes.filter(n => n.partyType === 'Vendor').map(n => n.party);
-    const [customers, vendors] = await Promise.all([
-      customerIds.length ? Customer.find({ _id: { $in: customerIds } }).select('name') : [],
-      vendorIds.length ? Vendor.find({ _id: { $in: vendorIds } }).select('name') : [],
-    ]);
+    // Hydrate customer names
+    const customerIds = notes.map(n => n.party);
+    const customers = customerIds.length ? await Customer.find({ _id: { $in: customerIds } }).select('name') : [];
     const partyMap = {};
     customers.forEach(c => { partyMap[c._id.toString()] = c.name; });
-    vendors.forEach(v => { partyMap[v._id.toString()] = v.name; });
 
-    // Hydrate ref doc numbers
-    const siIds = notes.filter(n => n.referenceDocumentType === 'SalesInvoice').map(n => n.referenceDocumentId);
-    const pbIds = notes.filter(n => n.referenceDocumentType === 'PurchaseBill').map(n => n.referenceDocumentId);
-    const [siDocs, pbDocs] = await Promise.all([
-      siIds.length ? SalesInvoice.find({ _id: { $in: siIds } }).select('invoiceNumber') : [],
-      pbIds.length ? PurchaseBill.find({ _id: { $in: pbIds } }).select('billNumber') : [],
-    ]);
+    // Hydrate ref doc numbers (Sales Invoice)
+    const siIds = notes.map(n => n.referenceDocumentId);
+    const siDocs = siIds.length ? await SalesInvoice.find({ _id: { $in: siIds } }).select('invoiceNumber') : [];
     const refMap = {};
     siDocs.forEach(d => { refMap[d._id.toString()] = d.invoiceNumber; });
-    pbDocs.forEach(d => { refMap[d._id.toString()] = d.billNumber; });
 
     const enriched = notes.map(n => {
       const obj = n.toObject();
@@ -62,22 +51,12 @@ exports.getCreditNote = async (req, res, next) => {
     if (!note) return sendError(res, 'Credit note not found', 404);
 
     const obj = note.toObject();
-    // Populate party
-    if (note.partyType === 'Customer') {
-      const cust = await Customer.findById(note.party);
-      obj.partyData = cust;
-    } else {
-      const vend = await Vendor.findById(note.party);
-      obj.partyData = vend;
-    }
-    // Populate ref doc
-    if (note.referenceDocumentType === 'SalesInvoice') {
-      const si = await SalesInvoice.findById(note.referenceDocumentId).select('invoiceNumber customer totalAmount');
-      obj.referenceDocument = si;
-    } else if (note.referenceDocumentType === 'PurchaseBill') {
-      const pb = await PurchaseBill.findById(note.referenceDocumentId).select('billNumber vendor totalAmount');
-      obj.referenceDocument = pb;
-    }
+    // Populate customer
+    const cust = await Customer.findById(note.party);
+    obj.partyData = cust;
+    // Populate reference Sales Invoice
+    const si = await SalesInvoice.findById(note.referenceDocumentId).select('invoiceNumber customer totalAmount');
+    obj.referenceDocument = si;
 
     return sendSuccess(res, obj);
   } catch (err) { next(err); }
@@ -85,22 +64,16 @@ exports.getCreditNote = async (req, res, next) => {
 
 exports.createCreditNote = async (req, res, next) => {
   try {
-    const { partyType, party, referenceDocumentType, referenceDocumentId, items, noteDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, referenceNumber } = req.body;
+    const { party, referenceDocumentId, items, noteDate, notes, sameAsBilling, billingAddress, shippingAddress, freightCharges, taxType, referenceNumber } = req.body;
     const orgId = req.organizationId;
 
-    // Validate reference document exists and party matches (B5)
-    if (referenceDocumentType === 'SalesInvoice') {
-      const doc = await SalesInvoice.findOne({ _id: referenceDocumentId, organization: orgId });
-      if (!doc) return sendError(res, 'Referenced Sales Invoice not found', 400);
-      if (doc.customer.toString() !== party) return sendError(res, 'Party does not match the referenced Invoice customer', 400);
-    } else if (referenceDocumentType === 'PurchaseBill') {
-      const doc = await PurchaseBill.findOne({ _id: referenceDocumentId, organization: orgId });
-      if (!doc) return sendError(res, 'Referenced Purchase Bill not found', 400);
-      if (doc.vendor.toString() !== party) return sendError(res, 'Party does not match the referenced Bill vendor', 400);
-    }
+    // Credit Notes are always against a Customer + Sales Invoice
+    const doc = await SalesInvoice.findOne({ _id: referenceDocumentId, organization: orgId });
+    if (!doc) return sendError(res, 'Referenced Sales Invoice not found', 400);
+    if (doc.customer.toString() !== party) return sendError(res, 'Customer does not match the referenced Invoice', 400);
 
     const note = await CreditNote.create({
-      partyType, party, referenceDocumentType, referenceDocumentId,
+      partyType: 'Customer', party, referenceDocumentType: 'SalesInvoice', referenceDocumentId,
       items, noteDate: noteDate || Date.now(), notes, sameAsBilling, billingAddress, shippingAddress,
       freightCharges, taxType, referenceNumber,
       organization: orgId, createdBy: req.user._id, updatedBy: req.user._id,
@@ -142,13 +115,9 @@ exports.getReferenceDocumentItems = async (req, res, next) => {
     const { type, id } = req.query;
     const orgId = req.organizationId;
     let items = [];
-    if (type === 'SalesInvoice') {
-      const doc = await SalesInvoice.findOne({ _id: id, organization: orgId }).populate('items.item', 'name unit hsnCode');
-      if (doc) items = doc.items;
-    } else if (type === 'PurchaseBill') {
-      const doc = await PurchaseBill.findOne({ _id: id, organization: orgId }).populate('items.item', 'name unit hsnCode');
-      if (doc) items = doc.items;
-    }
+    // Credit Notes only reference Sales Invoices
+    const doc = await SalesInvoice.findOne({ _id: id, organization: orgId }).populate('items.item', 'name unit hsnCode');
+    if (doc) items = doc.items;
     return sendSuccess(res, items);
   } catch (err) { next(err); }
 };

@@ -20,11 +20,11 @@ const creditNoteSchema = new mongoose.Schema(
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     noteNumber: { type: String },
     serialNumber: { type: String },
-    // Generic party (Customer or Vendor)
-    partyType: { type: String, enum: ['Customer', 'Vendor'], required: true },
-    party: { type: mongoose.Schema.Types.ObjectId, required: true },
-    // Mandatory reference document
-    referenceDocumentType: { type: String, enum: ['SalesInvoice', 'PurchaseBill'], required: true },
+    // Credit Note: Always issued to a Customer against a Sales Invoice
+    partyType: { type: String, enum: ['Customer'], default: 'Customer', required: true },
+    party: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+    // Reference document (Sales Invoice)
+    referenceDocumentType: { type: String, enum: ['SalesInvoice'], default: 'SalesInvoice', required: true },
     referenceDocumentId: { type: mongoose.Schema.Types.ObjectId, required: true },
     referenceNumber: { type: String, trim: true, default: '' },
     items: [creditNoteItemSchema],
