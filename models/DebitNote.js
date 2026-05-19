@@ -20,11 +20,11 @@ const debitNoteSchema = new mongoose.Schema(
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     noteNumber: { type: String },
     serialNumber: { type: String },
-    // Generic party (Customer or Vendor)
-    partyType: { type: String, enum: ['Customer', 'Vendor'], required: true },
-    party: { type: mongoose.Schema.Types.ObjectId, required: true },
-    // Mandatory reference document
-    referenceDocumentType: { type: String, enum: ['SalesInvoice', 'PurchaseBill'], required: true },
+    // Debit Note: Always issued to a Vendor against a Purchase Bill
+    partyType: { type: String, enum: ['Vendor'], default: 'Vendor', required: true },
+    party: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+    // Reference document (Purchase Bill)
+    referenceDocumentType: { type: String, enum: ['PurchaseBill'], default: 'PurchaseBill', required: true },
     referenceDocumentId: { type: mongoose.Schema.Types.ObjectId, required: true },
     referenceNumber: { type: String, trim: true, default: '' },
     items: [debitNoteItemSchema],
