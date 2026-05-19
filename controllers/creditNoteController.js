@@ -16,6 +16,13 @@ exports.getCreditNotes = async (req, res, next) => {
     if (req.query.status) filter.status = req.query.status;
     if (req.query.search) filter.noteNumber = { $regex: req.query.search, $options: 'i' };
 
+    if (filter['customer.name']) {
+      const Customer = require('../models/Customer');
+      const customers = await Customer.find({ name: filter['customer.name'], organization: req.organizationId }).select('_id');
+      filter.party = { $in: customers.map(c => c._id) };
+      delete filter['customer.name'];
+    }
+
     const [notes, total] = await Promise.all([
       CreditNote.find(filter).populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       CreditNote.countDocuments(filter),

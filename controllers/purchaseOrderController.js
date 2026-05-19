@@ -11,6 +11,13 @@ exports.getPOs = async (req, res, next) => {
     if (req.query.vendor) filter.vendor = req.query.vendor;
     if (req.query.search) filter.poNumber = { $regex: req.query.search, $options: 'i' };
 
+    if (filter['vendor.name']) {
+      const Vendor = require('../models/Vendor');
+      const vendors = await Vendor.find({ name: filter['vendor.name'], organization: req.organizationId }).select('_id');
+      filter.vendor = { $in: vendors.map(v => v._id) };
+      delete filter['vendor.name'];
+    }
+
     const [pos, total] = await Promise.all([
       PurchaseOrder.find(filter).populate('vendor', 'name').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       PurchaseOrder.countDocuments(filter),

@@ -22,7 +22,9 @@ const docTypePrefixMap = {
   PurchaseBill: 'PB',
   CreditNote: 'CN',
   DebitNote: 'DN',
-  ProformaInvoice: 'PI'
+  ProformaInvoice: 'PI',
+  StockIssue: 'SI',
+  StockConversion: 'SC'
 };
 
 /**

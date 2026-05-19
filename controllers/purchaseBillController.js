@@ -12,6 +12,13 @@ exports.getPurchaseBills = async (req, res, next) => {
     if (req.query.vendor) filter.vendor = req.query.vendor;
     if (req.query.search) filter.billNumber = { $regex: req.query.search, $options: 'i' };
 
+    if (filter['vendor.name']) {
+      const Vendor = require('../models/Vendor');
+      const vendors = await Vendor.find({ name: filter['vendor.name'], organization: req.organizationId }).select('_id');
+      filter.vendor = { $in: vendors.map(v => v._id) };
+      delete filter['vendor.name'];
+    }
+
     const [bills, total] = await Promise.all([
       PurchaseBill.find(filter).populate('vendor', 'name').populate('purchaseOrder', 'poNumber').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       PurchaseBill.countDocuments(filter),

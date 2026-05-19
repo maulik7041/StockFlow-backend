@@ -16,6 +16,13 @@ exports.getDebitNotes = async (req, res, next) => {
     if (req.query.status) filter.status = req.query.status;
     if (req.query.search) filter.noteNumber = { $regex: req.query.search, $options: 'i' };
 
+    if (filter['vendor.name']) {
+      const Vendor = require('../models/Vendor');
+      const vendors = await Vendor.find({ name: filter['vendor.name'], organization: req.organizationId }).select('_id');
+      filter.party = { $in: vendors.map(v => v._id) };
+      delete filter['vendor.name'];
+    }
+
     const [notes, total] = await Promise.all([
       DebitNote.find(filter).populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       DebitNote.countDocuments(filter),

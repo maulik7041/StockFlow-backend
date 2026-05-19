@@ -40,6 +40,7 @@ const creditNoteRoutes = require('./routes/creditNotes');
 const debitNoteRoutes = require('./routes/debitNotes');
 const purchaseBillRoutes = require('./routes/purchaseBills');
 const migrationRoutes = require('./routes/migration');
+const stockConversionRoutes = require('./routes/stockConversions');
 
 // Connect to DB
 connectDB();
@@ -76,6 +77,7 @@ app.use('/api/credit-notes', creditNoteRoutes);
 app.use('/api/debit-notes', debitNoteRoutes);
 app.use('/api/purchase-bills', purchaseBillRoutes);
 app.use('/api/migration', migrationRoutes);
+app.use('/api/stock-conversions', stockConversionRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));

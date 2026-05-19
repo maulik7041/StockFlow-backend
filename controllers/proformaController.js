@@ -17,6 +17,13 @@ exports.getProformaInvoices = async (req, res, next) => {
     if (req.query.customer) filter.customer = req.query.customer;
     if (req.query.search) filter.piNumber = { $regex: req.query.search, $options: 'i' };
 
+    if (filter['customer.name']) {
+      const Customer = require('../models/Customer');
+      const customers = await Customer.find({ name: filter['customer.name'], organization: req.organizationId }).select('_id');
+      filter.customer = { $in: customers.map(c => c._id) };
+      delete filter['customer.name'];
+    }
+
     const [invoices, total] = await Promise.all([
       ProformaInvoice.find(filter).populate('customer', 'name').populate('createdBy', 'name').sort(getSort(req.query)).skip(skip).limit(limit),
       ProformaInvoice.countDocuments(filter),
